@@ -43,6 +43,7 @@
   },
   "devDependencies": {
     "@types/react": "~19.2.2",
+    "sharp": "^0.35.5",
     "tsx": "^4.23.15",
     "typescript": "~6.0.3"
   },
@@ -52,6 +53,7 @@
     "test:api": "tsx scripts/test-book-api.ts",
     "export:web": "expo export -p web",
     "generate:sound": "node ./scripts/generate-tap-sound.mjs",
+    "generate:icons": "node ./scripts/generate-icons.mjs",
     "android": "expo start --android",
     "ios": "expo start --ios",
     "web": "expo start --web",
