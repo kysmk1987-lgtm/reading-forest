@@ -10,8 +10,11 @@ interface LocalWatering {
 }
 
 interface ForestState {
-  /** Stable id for this device's forest (used for share links when Firebase is not connected). */
+  /** Stable id for this device's forest (used for the preview page when Supabase is not connected). */
   localForestId: string;
+  /** Share slug of the published (Supabase) forest, once the user has shared it. */
+  publishedSlug: string | null;
+  setPublishedSlug: (slug: string | null) => void;
   weather: Weather;
   /** Local/demo watering counters keyed by forest id. */
   waterings: Record<string, LocalWatering>;
@@ -24,6 +27,8 @@ export const useForestStore = create<ForestState>()(
   persist(
     (set, get) => ({
       localForestId: `local-${Date.now().toString(36)}${Math.random().toString(36).slice(2, 6)}`,
+      publishedSlug: null,
+      setPublishedSlug: (publishedSlug) => set({ publishedSlug }),
       weather: 'clear',
       waterings: {},
       setWeather: (weather) => set({ weather }),

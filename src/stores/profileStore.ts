@@ -3,7 +3,7 @@ import { persist } from 'zustand/middleware';
 
 import { persistStorage } from '@/lib/storage';
 
-export type AuthMode = 'guest' | 'anonymous' | 'google';
+export type AuthMode = 'guest' | 'anonymous' | 'kakao' | 'google' | 'email';
 
 interface ProfileState {
   nickname: string;

@@ -40,7 +40,8 @@ export default function RootLayout() {
               <Stack.Screen name="(tabs)" />
               <Stack.Screen name="search" />
               <Stack.Screen name="book/[id]" />
-              <Stack.Screen name="forest/[userId]" />
+              <Stack.Screen name="forest/[slug]" />
+              <Stack.Screen name="auth/callback" />
               <Stack.Screen name="gallery" />
               <Stack.Screen name="trees" />
             </Stack>

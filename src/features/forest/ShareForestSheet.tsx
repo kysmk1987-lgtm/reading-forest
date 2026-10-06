@@ -1,24 +1,24 @@
 import { router } from 'expo-router';
-import { signInAnonymously } from 'firebase/auth';
 import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { StyleSheet, View } from 'react-native';
 
 import { AppText, Button, Sheet, showToast } from '@/components/ui';
-import { getFirebase, isFirebaseConfigured } from '@/lib/firebase';
+import { isSupabaseConfigured } from '@/lib/supabase';
 import { useForestStore } from '@/stores/forestStore';
 import { useProfileStore } from '@/stores/profileStore';
 import { palette, radius, spacing } from '@/theme';
 
 import { DEMO_FOREST_ID } from './demo';
-import type { ForestTree } from './model';
-import { publishForest } from './publicForest';
+import { publishMyForest } from './publicForest';
 import { absoluteUrl, forestPath, shareLink } from './share';
 
-export function ShareForestSheet({ visible, onClose, trees }: { visible: boolean; onClose: () => void; trees: ForestTree[] }) {
+export function ShareForestSheet({ visible, onClose }: { visible: boolean; onClose: () => void }) {
   const { t } = useTranslation();
   const nickname = useProfileStore((s) => s.nickname);
   const localForestId = useForestStore((s) => s.localForestId);
+  const publishedSlug = useForestStore((s) => s.publishedSlug);
+  const setPublishedSlug = useForestStore((s) => s.setPublishedSlug);
   const [busy, setBusy] = useState(false);
 
   const share = async (path: string) => {
@@ -28,14 +28,11 @@ export function ShareForestSheet({ visible, onClose, trees }: { visible: boolean
   };
 
   const publishAndShare = async () => {
-    const fb = getFirebase();
-    if (!fb) return;
     setBusy(true);
     try {
-      const user = fb.auth.currentUser ?? (await signInAnonymously(fb.auth)).user;
-      await publishForest(user.uid, { nickname, trees });
-      await share(forestPath(user.uid));
-      onClose();
+      const slug = await publishMyForest(nickname);
+      setPublishedSlug(slug);
+      await share(forestPath(slug));
     } catch (err) {
       console.warn('[forest] publish failed', err);
       showToast(t('forest.shareFailed'));
@@ -51,22 +48,25 @@ export function ShareForestSheet({ visible, onClose, trees }: { visible: boolean
 
   return (
     <Sheet visible={visible} onClose={onClose} title={t('forest.shareSheetTitle')}>
-      {isFirebaseConfigured ? (
+      {isSupabaseConfigured ? (
         <>
           <AppText center muted>
             {t('forest.shareBody')}
           </AppText>
           <Button label={t('forest.shareCta')} loading={busy} fullWidth onPress={publishAndShare} />
+          {publishedSlug ? (
+            <Button label={t('forest.openMine')} variant="sky" fullWidth onPress={() => go(forestPath(publishedSlug))} />
+          ) : null}
         </>
       ) : (
         <>
           <View style={styles.notice}>
             <AppText style={styles.noticeEmoji}>☁️</AppText>
             <AppText variant="subtitle" center>
-              {t('forest.firebaseNotice')}
+              {t('forest.serverNotice')}
             </AppText>
             <AppText variant="caption" muted center>
-              {t('forest.firebaseNoticeBody')}
+              {t('forest.serverNoticeBody')}
             </AppText>
           </View>
           <Button label={t('forest.previewMine')} fullWidth onPress={() => go(forestPath(localForestId))} />

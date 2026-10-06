@@ -4,7 +4,7 @@ export const DEMO_FOREST_ID = 'demo';
 
 const cover = (id: number, ts: string) => `https://t1.daumcdn.net/lbook/image/${id}?timestamp=${ts}`;
 
-/** Sample forest used for the shareable-page demo while Firebase is not connected. */
+/** Sample forest used for the shareable-page demo while Supabase is not connected. */
 export const DEMO_FOREST = {
   nickname: '숲속 책벌레',
   baseWaterCount: 27,

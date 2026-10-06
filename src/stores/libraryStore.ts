@@ -8,10 +8,13 @@ import type { LibraryEntry, LibraryEntryDraft, ReadingLog } from '@/types';
 
 import { useCelebrationStore } from './celebrationStore';
 
-type Listener = (event: { type: 'upsert'; entry: LibraryEntry } | { type: 'delete'; id: string }) => void;
+export type LibraryMutation =
+  | { type: 'upsert'; entry: LibraryEntry; logs: ReadingLog[] }
+  | { type: 'delete'; id: string };
+type Listener = (event: LibraryMutation) => void;
 const listeners = new Set<Listener>();
 
-/** Lets the cloud sync layer mirror local mutations without coupling the store to Firebase. */
+/** Lets the cloud sync layer mirror local mutations without coupling the store to the backend. */
 export function onLibraryMutation(listener: Listener) {
   listeners.add(listener);
   return () => listeners.delete(listener);
@@ -45,8 +48,8 @@ interface LibraryState {
   addEntry: (draft: LibraryEntryDraft) => LibraryEntry;
   updateEntry: (id: string, patch: Partial<LibraryEntryDraft>) => void;
   removeEntry: (id: string) => void;
-  /** Merge remote entries (last write wins by `updatedAt`). */
-  mergeEntries: (remote: LibraryEntry[]) => void;
+  /** Merge remote entries (last write wins by `updatedAt`) and logs (union by id). */
+  mergeRemote: (remote: { entries: LibraryEntry[]; logs: ReadingLog[] }) => void;
 }
 
 interface PersistedV0 {
@@ -64,7 +67,7 @@ export const useLibraryStore = create<LibraryState>()(
         const entry: LibraryEntry = { ...draft, id: newId(), createdAt: now, updatedAt: now };
         const logs = toLogs(logsForChange(undefined, entry));
         set((s) => ({ entries: { ...s.entries, [entry.id]: entry }, logs: [...s.logs, ...logs] }));
-        emit({ type: 'upsert', entry });
+        emit({ type: 'upsert', entry, logs });
         maybeCelebrate(undefined, entry);
         return entry;
       },
@@ -74,7 +77,7 @@ export const useLibraryStore = create<LibraryState>()(
         const entry: LibraryEntry = { ...current, ...patch, updatedAt: Date.now() };
         const logs = toLogs(logsForChange(current, entry));
         set((s) => ({ entries: { ...s.entries, [id]: entry }, logs: logs.length ? [...s.logs, ...logs] : s.logs }));
-        emit({ type: 'upsert', entry });
+        emit({ type: 'upsert', entry, logs });
         maybeCelebrate(current, entry);
       },
       removeEntry: (id) => {
@@ -84,16 +87,19 @@ export const useLibraryStore = create<LibraryState>()(
         });
         emit({ type: 'delete', id });
       },
-      mergeEntries: (remote) => {
+      mergeRemote: (remote) => {
         set((s) => {
           const entries = { ...s.entries };
-          const added: LibraryEntry[] = [];
-          for (const r of remote) {
+          for (const r of remote.entries) {
             const local = entries[r.id];
-            if (!local) added.push(r);
             if (!local || local.updatedAt < r.updatedAt) entries[r.id] = r;
           }
-          return { entries, logs: [...s.logs, ...toLogs(backfillLogs(added))] };
+          const seen = new Set(s.logs.map((l) => l.id));
+          const incoming = remote.logs.filter((l) => !seen.has(l.id) && entries[l.entryId]);
+          const covered = new Set([...s.logs, ...incoming].map((l) => l.entryId));
+          const missing = remote.entries.filter((r) => !covered.has(r.id));
+          const logs = [...s.logs, ...incoming, ...toLogs(backfillLogs(missing))].sort((a, b) => a.createdAt - b.createdAt);
+          return { entries, logs };
         });
       },
     }),

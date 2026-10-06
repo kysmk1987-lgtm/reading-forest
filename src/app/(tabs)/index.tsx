@@ -177,7 +177,7 @@ export default function HomeScreen() {
         current={speciesEntry ? speciesOf(speciesEntry, isPremium) : undefined}
         onClose={() => setSpeciesFor(null)}
       />
-      <ShareForestSheet visible={shareOpen} onClose={() => setShareOpen(false)} trees={trees} />
+      <ShareForestSheet visible={shareOpen} onClose={() => setShareOpen(false)} />
     </Screen>
   );
 }

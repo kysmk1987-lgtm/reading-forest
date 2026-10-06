@@ -8,12 +8,12 @@ import { AppText, Button, Card, EmptyState, IconButton, Screen, showToast } from
 import { DEMO_FOREST, DEMO_FOREST_ID } from '@/features/forest/demo';
 import { ForestGarden } from '@/features/forest/ForestGarden';
 import { treeFromEntry, type ForestTree } from '@/features/forest/model';
-import { countWaterings, fetchForest, utcDay, waterForest } from '@/features/forest/publicForest';
+import { fetchPublicForest, kstDay, waterForest, type PublicForest } from '@/features/forest/publicForest';
 import { WaterDrops } from '@/features/forest/WaterDrops';
 import { useEntitlements } from '@/lib/entitlements';
 import { todayISO } from '@/lib/date';
 import { waterFeedback } from '@/lib/feedback';
-import { isFirebaseConfigured } from '@/lib/firebase';
+import { isSupabaseConfigured } from '@/lib/supabase';
 import { useForestStore } from '@/stores/forestStore';
 import { useLibraryStore } from '@/stores/libraryStore';
 import { useProfileStore } from '@/stores/profileStore';
@@ -31,8 +31,8 @@ interface ForestView {
 /** Public, read-only forest that visitors can water once a day. */
 export default function PublicForestScreen() {
   const { t } = useTranslation();
-  const { userId } = useLocalSearchParams<{ userId: string }>();
-  const forestId = String(userId ?? '');
+  const { slug } = useLocalSearchParams<{ slug: string }>();
+  const forestId = String(slug ?? '');
   const { isPremium } = useEntitlements();
   const localForestId = useForestStore((s) => s.localForestId);
   const localWater = useForestStore((s) => s.waterings[forestId]);
