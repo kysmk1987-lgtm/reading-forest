@@ -1,18 +1,21 @@
 {
   "expo": {
-    "name": "book",
-    "slug": "book",
-    "version": "1.0.0",
+    "name": "독서의숲",
+    "slug": "reading-forest",
+    "description": "독서의숲 - 책을 읽으면 나무가 자라는 독서 기록 앱",
+    "version": "0.1.0",
     "orientation": "portrait",
     "icon": "./assets/images/icon.png",
-    "scheme": "book",
-    "userInterfaceStyle": "automatic",
+    "scheme": "readingforest",
+    "userInterfaceStyle": "light",
     "ios": {
-      "icon": "./assets/expo.icon"
+      "icon": "./assets/expo.icon",
+      "bundleIdentifier": "com.readingforest.app"
     },
     "android": {
+      "package": "com.readingforest.app",
       "adaptiveIcon": {
-        "backgroundColor": "#E6F4FE",
+        "backgroundColor": "#DDF1CF",
         "foregroundImage": "./assets/images/android-icon-foreground.png",
         "backgroundImage": "./assets/images/android-icon-background.png",
         "monochromeImage": "./assets/images/android-icon-monochrome.png"
@@ -20,19 +23,27 @@
       "predictiveBackGestureEnabled": false
     },
     "web": {
-      "output": "static",
-      "favicon": "./assets/images/favicon.png"
+      "output": "single",
+      "favicon": "./assets/images/favicon.png",
+      "name": "독서의숲",
+      "shortName": "독서의숲",
+      "lang": "ko",
+      "themeColor": "#FBF5E6",
+      "backgroundColor": "#FBF5E6"
     },
     "plugins": [
       "expo-router",
       [
         "expo-splash-screen",
         {
-          "backgroundColor": "#208AEF",
+          "backgroundColor": "#FBF5E6",
           "image": "./assets/images/splash-icon.png",
           "imageWidth": 76
         }
-      ]
+      ],
+      "expo-localization",
+      "expo-audio",
+      "@react-native-community/datetimepicker"
     ],
     "experiments": {
       "typedRoutes": true,
