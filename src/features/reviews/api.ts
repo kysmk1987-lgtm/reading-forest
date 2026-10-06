@@ -25,6 +25,8 @@ export interface ReviewsResult {
 }
 
 const ISBN13 = /^\d{13}$/;
+/** Set once the server answers "no such function" so later screens don't repeat the 404 until a reload. */
+let schemaMissing = false;
 
 export const isReviewsConfigured = () => getSupabase() !== null;
 
@@ -57,12 +59,15 @@ export async function fetchReviews(isbn13: string | undefined, entry?: LibraryEn
   if (!sb || !isbn13 || !ISBN13.test(isbn13)) {
     return { mode: 'local', summary: summarize(local.map((r) => r.rating)), reviews: local };
   }
+  const unavailable = (): ReviewsResult => ({ mode: 'unavailable', summary: summarize(local.map((r) => r.rating)), reviews: local });
+  if (schemaMissing) return unavailable();
   const [summary, feed] = await Promise.all([
     sb.rpc('book_review_summary', { p_isbn: isbn13 }),
     sb.rpc('book_reviews_feed', { p_isbn: isbn13, p_limit: 50, p_offset: 0 }),
   ]);
   if (isMissingSchema(summary.error) || isMissingSchema(feed.error)) {
-    return { mode: 'unavailable', summary: summarize(local.map((r) => r.rating)), reviews: local };
+    schemaMissing = true;
+    return unavailable();
   }
   if (summary.error) throw summary.error;
   if (feed.error) throw feed.error;
@@ -89,7 +94,7 @@ async function writer() {
 /** Publishes (or updates) my review. Returns false when it could not be saved on the server. */
 export async function saveReview(isbn13: string, rating: number, body: string): Promise<boolean> {
   const value = normalizeRating(rating);
-  if (!value || !ISBN13.test(isbn13)) return false;
+  if (!value || !ISBN13.test(isbn13) || schemaMissing) return false;
   const w = await writer();
   if (!w) return false;
   const { error } = await w.sb.rpc('upsert_book_review', {
@@ -98,6 +103,7 @@ export async function saveReview(isbn13: string, rating: number, body: string): 
     p_body: cleanReviewBody(body),
     p_nickname: useProfileStore.getState().nickname.slice(0, 32),
   });
+  if (isMissingSchema(error)) schemaMissing = true;
   return !error;
 }
 
