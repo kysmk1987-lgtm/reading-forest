@@ -44,7 +44,6 @@ export default function PublicForestScreen() {
   const [bump] = useState(() => new Animated.Value(1));
   const [gardenSize, setGardenSize] = useState({ width: 0, height: 0 });
   const [watering, setWatering] = useState(false);
-  const [wateredRemote, setWateredRemote] = useState(false);
 
   const localView = useMemo<ForestView | null>(() => {
     if (forestId === DEMO_FOREST_ID) {
@@ -57,19 +56,20 @@ export default function PublicForestScreen() {
     return null;
   }, [forestId, localForestId, myEntries, myNickname, isPremium]);
 
+  const queryKey = ['publicForest', forestId];
   const remote = useQuery({
-    queryKey: ['publicForest', forestId],
-    enabled: !localView && isFirebaseConfigured && !!forestId,
-    queryFn: async () => {
-      const [forest, count] = await Promise.all([fetchForest(forestId), countWaterings(forestId)]);
-      return forest ? { ...forest, count } : null;
-    },
+    queryKey,
+    enabled: !localView && isSupabaseConfigured && !!forestId,
+    queryFn: () => fetchPublicForest(forestId),
   });
 
   const view: ForestView | null =
-    localView ?? (remote.data ? { nickname: remote.data.nickname, trees: remote.data.trees, baseCount: remote.data.count, mode: 'remote' } : null);
+    localView ??
+    (remote.data ? { nickname: remote.data.nickname, trees: remote.data.trees, baseCount: remote.data.waterCount, mode: 'remote' } : null);
   const count = view ? view.baseCount + (view.mode === 'local' ? (localWater?.count ?? 0) : 0) : 0;
-  const wateredToday = view?.mode === 'local' ? localWater?.lastDay === todayISO() : wateredRemote;
+  const wateredToday = view?.mode === 'local' ? localWater?.lastDay === todayISO() : Boolean(remote.data?.wateredToday);
+  const patchRemote = (patch: Partial<PublicForest>) =>
+    queryClient.setQueryData<PublicForest | null>(queryKey, (d) => (d ? { ...d, ...patch } : d));
 
   const celebrate = () => {
     waterFeedback();
@@ -84,15 +84,15 @@ export default function PublicForestScreen() {
       if (waterLocal(forestId, todayISO())) celebrate();
       return;
     }
+    if (!remote.data) return;
     setWatering(true);
-    const result = await waterForest(forestId);
+    const result = await waterForest(remote.data.forestId);
     setWatering(false);
     if (result === 'ok') {
       celebrate();
-      setWateredRemote(true);
-      queryClient.setQueryData(['publicForest', forestId], (d: typeof remote.data) => (d ? { ...d, count: d.count + 1 } : d));
+      patchRemote({ wateredToday: true, waterCount: remote.data.waterCount + 1 });
     } else if (result === 'already') {
-      setWateredRemote(true);
+      patchRemote({ wateredToday: true });
       showToast(t('forest.alreadyWatered'));
     } else {
       showToast(t('forest.waterFailed'));
@@ -116,8 +116,8 @@ export default function PublicForestScreen() {
           <EmptyState
             emoji="🌫️"
             title={t('forest.notFound')}
-            body={isFirebaseConfigured ? t('forest.notFoundBody') : t('forest.firebaseNoticeBody')}
-            action={<Button label={t('forest.viewDemo')} onPress={() => router.replace({ pathname: '/forest/[userId]', params: { userId: DEMO_FOREST_ID } })} />}
+            body={isSupabaseConfigured ? t('forest.notFoundBody') : t('forest.serverNoticeBody')}
+            action={<Button label={t('forest.viewDemo')} onPress={() => router.replace({ pathname: '/forest/[slug]', params: { slug: DEMO_FOREST_ID } })} />}
           />
         )}
       </Screen>
@@ -167,7 +167,7 @@ export default function PublicForestScreen() {
           onPress={water}
         />
         <AppText variant="tiny" muted center>
-          {t('forest.waterRule', { day: view.mode === 'remote' ? utcDay() : todayISO() })}
+          {t('forest.waterRule', { day: view.mode === 'remote' ? kstDay() : todayISO() })}
         </AppText>
       </Card>
 

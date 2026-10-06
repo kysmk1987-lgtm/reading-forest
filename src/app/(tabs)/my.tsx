@@ -35,12 +35,11 @@ export default function MyScreen() {
   }, [entriesMap]);
 
   const handleAuthResult = (code: AuthErrorCode | null) => {
-    if (code === 'native-google-unsupported') notify(t('my.googleNativeSoon'));
-    else if (code === 'failed') notify(t('my.authError'));
+    if (code === 'failed') notify(t('my.authError'));
   };
 
-  const accountLabel =
-    profile.authMode === 'google' ? t('my.google') : profile.authMode === 'anonymous' ? t('my.anonymous') : t('my.guest');
+  const accountLabel = t(`my.account.${profile.authMode}`);
+  const signedIn = profile.authMode !== 'guest' && profile.authMode !== 'anonymous';
 
   return (
     <Screen title={t('my.title')}>
@@ -91,20 +90,50 @@ export default function MyScreen() {
             setEditingName(!editingName);
           }}
         />
-        {auth.isFirebaseConfigured ? (
-          profile.authMode === 'guest' ? (
-            <>
-              <Button size="sm" label={t('my.signInGoogle')} loading={auth.pending} onPress={async () => handleAuthResult(await auth.signInGoogle())} />
-              <Button size="sm" variant="wood" label={t('my.signInAnonymous')} onPress={async () => handleAuthResult(await auth.signInAnon())} />
-            </>
-          ) : (
-            <Button size="sm" variant="soft" label={t('my.signOut')} onPress={async () => handleAuthResult(await auth.signOut())} />
-          )
+        {auth.isSupabaseConfigured && profile.authMode !== 'guest' ? (
+          <Button
+            size="sm"
+            variant="soft"
+            label={t('my.signOut')}
+            loading={auth.pending === 'signOut'}
+            onPress={async () => handleAuthResult(await auth.signOut())}
+          />
         ) : null}
       </View>
-      {!auth.isFirebaseConfigured ? (
+      {auth.isSupabaseConfigured && !signedIn ? (
+        <Card style={styles.section}>
+          <AppText variant="subtitle">{t('my.loginTitle')}</AppText>
+          <AppText variant="caption" muted>
+            {profile.authMode === 'anonymous' ? t('my.anonymousHint') : t('my.loginBody')}
+          </AppText>
+          <Button
+            label={t('my.signInKakao')}
+            variant="wood"
+            fullWidth
+            loading={auth.pending === 'kakao'}
+            onPress={async () => handleAuthResult(await auth.signInKakao())}
+          />
+          <Button
+            label={t('my.signInGoogle')}
+            variant="soft"
+            fullWidth
+            loading={auth.pending === 'google'}
+            onPress={async () => handleAuthResult(await auth.signInGoogle())}
+          />
+          {profile.authMode === 'guest' ? (
+            <Button
+              label={t('my.signInAnonymous')}
+              variant="sky"
+              fullWidth
+              loading={auth.pending === 'anonymous'}
+              onPress={async () => handleAuthResult(await auth.signInAnon())}
+            />
+          ) : null}
+        </Card>
+      ) : null}
+      {!auth.isSupabaseConfigured ? (
         <AppText variant="caption" muted>
-          ☁️ {t('my.firebaseOff')} · {t('my.guestHint')}
+          ☁️ {t('my.serverOff')} · {t('my.guestHint')}
         </AppText>
       ) : null}
 

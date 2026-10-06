@@ -16,7 +16,7 @@
   <img src="docs/screenshots/library.png" width="180" alt="서재" />
 </p>
 
-- **스택**: Expo (SDK 57) · TypeScript · Expo Router · Zustand(persist + AsyncStorage) · TanStack Query · Firebase JS SDK(Auth/Firestore) · i18next + expo-localization · Vercel 서버리스 함수(도서 검색 프록시)
+- **스택**: Expo (SDK 57) · TypeScript · Expo Router · Zustand(persist + AsyncStorage) · TanStack Query · Supabase(Auth/Postgres/Realtime, supabase-js) · i18next + expo-localization · Vercel 서버리스 함수(도서 검색 프록시)
 - **플랫폼**: iOS / Android / 웹 (웹은 `npx expo export -p web` → Vercel 호스팅)
 - **배포 주소**: https://reading-forest-nine.vercel.app
 
@@ -85,16 +85,58 @@ npx vercel --prod --yes                                                         
 | `EXPO_PUBLIC_ENABLED_LOCALES` | `ko` | 활성 언어 목록(쉼표 구분) |
 | `EXPO_PUBLIC_BOOK_REGION` | `KR` | 도서 검색 지역 |
 | `EXPO_PUBLIC_API_BASE_URL` | (자동) | `/api` 서버 주소 |
-| `EXPO_PUBLIC_FIREBASE_*` (6개) | 없음 | 설정 시 익명/구글 로그인과 Firestore 동기화(`users/{uid}/library`) 활성화. 없으면 로컬 게스트 모드 |
+| `EXPO_PUBLIC_SUPABASE_URL` | 없음 | Supabase 프로젝트 주소 (`https://<project-ref>.supabase.co`) |
+| `EXPO_PUBLIC_SUPABASE_ANON_KEY` | 없음 | Supabase anon(publishable) 키. RLS로 보호되므로 앱에 들어가도 안전. 두 값이 없으면 **로컬 게스트 모드**(이 기기에만 저장, 데모 숲) |
 
-### Firebase 연결 순서 (나중에)
-1. [Firebase 콘솔](https://console.firebase.google.com)에서 프로젝트 생성 → 웹 앱 추가 → 설정값을 `.env`/Vercel에 입력
-2. Authentication → 로그인 방법에서 **익명**, **Google** 사용 설정, 승인된 도메인에 `reading-forest-nine.vercel.app` 추가
-3. Firestore 데이터베이스 생성 후 저장소의 **`firestore.rules`** 내용을 콘솔 → Firestore → 규칙에 붙여넣고 게시합니다.
-   - `users/{uid}/**`: 본인만 읽기/쓰기 (서재 동기화)
-   - `forests/{uid}`: 누구나 보기, 주인만 공개(쓰기) — 숲 공유 페이지
-   - `forests/{uid}/waterings/{방문자uid}_{오늘UTC날짜}`: 방문자 본인만 생성, 수정·삭제 불가 → **숲 하나에 하루 한 번만 물 주기**
-4. 연결하면 홈의 **공유** 버튼이 내 숲을 `forests/{uid}`에 공개하고 `/forest/{uid}` 링크를 공유합니다(Web Share API → 복사, 앱은 공유 시트). 방문자는 익명 로그인으로 물을 줍니다.
+> ⚠️ `service_role`/secret 키와 DB 비밀번호는 절대 앱·저장소에 넣지 마세요(RLS를 우회합니다).
+
+## 🗄️ 백엔드: Supabase 연결하기
+
+로그인(익명·카카오·구글), 서재/독서 로그 동기화, 공개 숲 + 물 주기, (3차) 실시간 접속자·응원·테마 독서실은 **Supabase**(Postgres + Auth + Realtime)를 씁니다. 연결하지 않아도 앱은 로컬 모드로 모두 동작합니다.
+
+### 1) 프로젝트 만들기
+1. [supabase.com](https://supabase.com) → **New project** → Region: **Northeast Asia (Seoul)** → DB 비밀번호는 안전한 곳에 보관
+2. **Project Settings → API**(또는 상단 **Connect**)에서 **Project URL**과 **anon / publishable 키**를 복사
+
+### 2) 데이터베이스 만들기 (마이그레이션)
+- **간단한 방법**: 대시보드 **SQL Editor → New query**에 저장소의 **`supabase/setup.sql`** 내용을 통째로 붙여넣고 **Run**
+- **CLI**: `npx supabase login` → `npx supabase link --project-ref <project-ref>` → `npx supabase db push` (`supabase/migrations/*.sql` 순서대로 적용)
+
+만들어지는 것:
+| 테이블 | 내용 | 접근 규칙(RLS) |
+| --- | --- | --- |
+| `profiles` | 닉네임, `is_premium` | 본인만 조회, 닉네임만 수정 가능(`is_premium`은 앱에서 못 바꿈). 가입 시 트리거로 자동 생성 |
+| `books` | ISBN-13 기준 책 정보 캐시 | 누구나 조회, 로그인 사용자는 없는 책만 추가 |
+| `user_books` | 내 서재(상태·진행률·별점·한줄평·날짜·나무 종류) | 본인만 읽기/쓰기 |
+| `reading_logs` | 날짜별 독서 기록(읽은 쪽수, 3차부터 집중 시간) | 본인만 |
+| `forests` | 공개 숲(`share_slug`, `is_public`) | 공개된 숲은 누구나 조회, 주인만 수정 |
+| `waterings` | 물 주기 | 로그인(익명 포함) 사용자가 공개 숲에 추가. `unique(forest_id, visitor_id, watered_on)` → **하루 한 번** |
+
+- `get_public_forest(slug)` RPC: 공개 숲 페이지용(나무·물 준 횟수만, 한줄평/별점은 노출 안 함)
+- `monthly_reading_stats` 뷰: 월별 독서한 날·쪽수·완독 수 (통계/독서 결산용)
+
+### 3) 로그인 설정 (Authentication)
+1. **Authentication → Sign In / Providers → Anonymous sign-ins** 켜기 (게스트가 숲 공유·물 주기를 할 때 사용)
+2. **카카오 로그인**
+   - [Kakao Developers](https://developers.kakao.com) → 내 애플리케이션 → 앱 추가(이미 도서 검색용 앱이 있으면 그대로 사용 가능)
+   - **카카오 로그인 → 활성화 ON**
+   - **Redirect URI**: `https://<project-ref>.supabase.co/auth/v1/callback`
+   - **동의항목**: 닉네임(`profile_nickname`), 프로필 사진(`profile_image`) 설정. Supabase는 이메일(`account_email`)도 요청하므로, 이메일 동의항목을 켤 수 없다면(비즈 앱 전환 필요) Supabase의 Kakao 설정에서 **Allow users without an email**을 켜세요
+   - **보안 → Client Secret 코드 생성 → 활성화**
+   - Supabase **Authentication → Providers → Kakao**: Enable, **Client ID = 카카오 REST API 키**, **Client Secret = 위에서 만든 코드** → Save
+3. **구글 로그인(선택)**: Google Cloud Console에서 OAuth 클라이언트(웹) 생성 → 승인된 리디렉션 URI에 `https://<project-ref>.supabase.co/auth/v1/callback` → Supabase Providers → Google에 Client ID/Secret 입력
+4. **Authentication → URL Configuration**
+   - **Site URL**: `https://reading-forest-nine.vercel.app`
+   - **Redirect URLs**: `https://reading-forest-nine.vercel.app/**`, `http://localhost:8081/**`, `readingforest://**`, (Vercel 미리보기 주소를 쓰려면) `https://*-kysmk1987-8120s-projects.vercel.app/**`
+
+### 4) 앱에 연결
+Vercel → Project → Settings → Environment Variables(Production/Preview/Development)와 로컬 `.env.local`에 `EXPO_PUBLIC_SUPABASE_URL`, `EXPO_PUBLIC_SUPABASE_ANON_KEY`를 넣고 다시 배포합니다.
+
+### 동작 방식
+- **게스트 → 로그인 시 데이터 연결**: 처음 로그인하면 이 기기의 서재·독서 로그를 계정으로 업로드하고, 서버의 기록과 합칩니다(같은 책은 최근 수정본 우선). 이후 변경은 바로바로 서버에 저장(write-through), 다른 기기에서 로그인하면 내려받습니다.
+- **카카오/구글 로그인**: 웹은 카카오 페이지로 이동했다가 `/auth/callback`으로 돌아옵니다. 앱(iOS/Android)은 인앱 브라우저(expo-web-browser) + `readingforest://auth/callback` 딥링크로 처리합니다.
+- **공개 숲**: 홈의 **공유** → 서재를 동기화하고 `forests`에 공개 → `/forest/{share_slug}` 링크 공유(Web Share → 복사, 앱은 공유 시트).
+- **물 주기**: 방문자는 익명 로그인으로 `waterings`에 한 줄 추가. 같은 날 두 번째는 unique 제약으로 거절됩니다(한국 시간 기준 날짜).
 
 ## 🌏 나중에 해외 언어·해외 도서를 켜는 방법
 
@@ -128,23 +170,24 @@ src/
 │  ├─ ForestTabBar.tsx      # 나무 판자 느낌의 커스텀 탭바 (+ 광고 자리)
 │  └─ BannerAdPlaceholder.tsx · BookCover.tsx · GrowthBadge.tsx(작은 나무 그림)
 ├─ features/
-│  ├─ auth/useAuth.ts       # Firebase 익명/구글 로그인 훅 (미설정 시 게스트)
+│  ├─ auth/useAuth.ts       # Supabase 익명/카카오/구글 로그인 훅 (미설정 시 게스트)
 │  ├─ books/                # 검색/상세 쿼리 훅(상세 정보로 서재 기록 자동 보강), 검색 결과 아이템
 │  ├─ forest/               # TreeGraphic(SVG 나무), AnimatedTree(흔들림·성장 애니메이션), ForestGarden(아이소메트릭 숲),
 │  │                        #   species(나무 종류), GrowthCelebration, SpeciesSheet, 날씨, 공유/물 주기(publicForest, demo)
 │  ├─ records/              # 독서 캘린더, 통계, 집계 함수
-│  └─ library/              # 기록 시트(4가지 상태), 서재 카드, 진행률 시트, 정렬, 성장 단계, 독서 로그, Firestore 동기화
+│  └─ library/              # 기록 시트(4가지 상태), 서재 카드, 진행률 시트, 정렬, 성장 단계, 독서 로그, Supabase 동기화(cloudSync + syncMapping)
 ├─ lib/
 │  ├─ api/books.ts          # 지역별 검색 클라이언트 (KR → /api 프록시)
 │  ├─ api/global/           # 해외용 Google Books · Open Library (BOOK_REGION=GLOBAL일 때만)
 │  ├─ i18n/                 # i18next 초기화 + locales/ko.ts(활성), en.ts(비활성)
-│  ├─ firebase.ts · feedback.ts(사운드+햅틱) · entitlements.ts(무료/프리미엄)
+│  ├─ supabase.ts · feedback.ts(사운드+햅틱) · entitlements.ts(무료/프리미엄)
 │  └─ confirm.ts · date.ts · storage.ts · queryClient.ts
 ├─ stores/                  # Zustand: library(+독서 로그), profile, settings, bookCache, forest(날씨·물 주기), celebration
 ├─ theme/                   # colors · typography · spacing(radius) · shadows
 └─ types/                   # Book, LibraryEntry, ReadingStatus ...
 scripts/test-book-api.ts    # 도서 API 오프라인 테스트
-firestore.rules             # Firestore 보안 규칙 (서재 동기화, 숲 공유, 하루 한 번 물 주기)
+supabase/migrations/        # DB 스키마 + RLS (0001_init.sql …), setup.sql = 전부 합친 붙여넣기용 파일
+scripts/test-sync-mapping.ts # 서재 ⇄ Supabase 행 변환 오프라인 테스트
 vercel.json                 # 빌드 설정, /api 제외 SPA 리라이트, 함수 설정
 ```
 
@@ -158,8 +201,8 @@ vercel.json                 # 빌드 설정, /api 제외 SPA 리라이트, 함�
 - **통계**: 읽는 중·완독·기록 수, 이번 달 독서한 날 링, 월별 독서량(권수/페이지 전환, 연도 선택).
 - **독서 로그**: 책 추가·진행률 업데이트·완독 때마다 `(날짜, 책, 읽은 쪽수)` 기록이 자동 저장됩니다. 기존 서재 데이터는 업데이트 시 시작일/완독일 기준으로 로그가 자동 생성됩니다(스토어 버전 1 마이그레이션).
 - **물 주기(응원)**: 공개 숲 페이지 `/forest/{id}` (읽기 전용 숲 + **물 주기 💧** 버튼, 물방울 애니메이션 + 횟수, 하루 한 번).
-  - **Firebase 연결 전(현재)**: 공유 버튼을 누르면 "Firebase 연결 후 공개 공유 가능" 안내와 함께 **내 숲 미리보기**, **데모 숲(`/forest/demo`)** 둘러보기, 데모 링크 복사를 제공합니다. 물 주기는 이 기기에만 기록됩니다.
-  - **Firebase 연결 후**: 내 숲을 Firestore에 공개하고 링크를 공유, 방문자 물 주기는 Firestore 규칙으로 하루 한 번 제한.
+  - **서버 미연결(로컬 모드)**: 공유 버튼을 누르면 "서버 연결 후 공개 공유 가능" 안내와 함께 **내 숲 미리보기**, **데모 숲(`/forest/demo`)** 둘러보기, 데모 링크 복사를 제공합니다. 물 주기는 이 기기에만 기록됩니다.
+  - **Supabase 연결 후**: 내 숲을 공개하고 `/forest/{slug}` 링크를 공유, 방문자 물 주기는 DB unique 제약으로 하루 한 번 제한.
 
 ## ✅ 1차 기능
 
@@ -172,7 +215,7 @@ vercel.json                 # 빌드 설정, /api 제외 SPA 리라이트, 함�
   - 읽고 싶은 책: 기대지수(하트) · 기대평
   - 중단한 책: 시작/중단일 · 별점 · 한줄평
 - **서재**: 상태별 탭 + 개수, 정렬(최신 저장순/오래된 저장순/최근 수정순/제목순/평점순), 진행률 바(% · 현재/전체 쪽), 수정·삭제, 진행률 빠른 업데이트(100% 도달 시 자동 완독 처리)
-- **인증**: Firebase 설정 시 익명/구글(웹 팝업) 로그인 + Firestore 동기화, 미설정 시 로컬 게스트 프로필
+- **인증**: Supabase 설정 시 익명/카카오/구글 로그인 + 서재 동기화, 미설정 시 로컬 게스트 프로필
 - **요금제 게이팅**: `entitlements` 모듈(`isPremium`, 기본 무료) + 무료 사용자에게만 하단 광고 자리 표시
 
 ## 🗺️ 로드맵
@@ -180,7 +223,7 @@ vercel.json                 # 빌드 설정, /api 제외 SPA 리라이트, 함�
 | 단계 | 내용 |
 | --- | --- |
 | **1차** | 기반 + 기본 독서기록 ✅ |
-| **2차** | 독서 숲 — 성장 그래픽, 아이소메트릭 숲, 캘린더/통계, 물주기 ✅ (공개 공유는 Firebase 연결 후) |
+| **2차** | 독서 숲 — 성장 그래픽, 아이소메트릭 숲, 캘린더/통계, 물주기 ✅ (백엔드 Firebase → Supabase 전환) |
 | **3차** | 뽀모도로 · 백색소음 · 3D 지구본 · 실시간 접속자 · 조용한 응원 · 테마룸 |
 | **4차** | 문장 카드(OCR) · 갤러리 · 번역(Functions, 무료 하루 10회) · 스마트 블러 |
 | **5차** | 독서 결산 · 인앱 결제(RevenueCat)/광고(AdMob) · 출시 |

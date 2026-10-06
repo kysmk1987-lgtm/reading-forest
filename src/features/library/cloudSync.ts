@@ -109,7 +109,9 @@ export function startLibrarySync(userId: string): () => void {
 
   const unsubscribeProfile = useProfileStore.subscribe((s, prev) => {
     if (!active || s.nickname === prev.nickname) return;
-    enqueue(() => sb.from('profiles').update({ nickname: s.nickname, updated_at: new Date().toISOString() }).eq('id', userId));
+    enqueue(async () => {
+      await sb.from('profiles').update({ nickname: s.nickname, updated_at: new Date().toISOString() }).eq('id', userId);
+    });
   });
 
   return () => {
