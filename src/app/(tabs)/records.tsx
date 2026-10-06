@@ -5,6 +5,7 @@ import { View, StyleSheet } from 'react-native';
 import { Screen, SegmentedControl } from '@/components/ui';
 import { ReadingCalendar } from '@/features/records/ReadingCalendar';
 import { ReadingStats } from '@/features/records/ReadingStats';
+import { WrappedBanner } from '@/features/wrapped/WrappedBanner';
 
 type Section = 'calendar' | 'stats';
 
@@ -13,6 +14,7 @@ export default function RecordsScreen() {
   const [section, setSection] = useState<Section>('calendar');
   return (
     <Screen title={t('records.title')}>
+      <WrappedBanner />
       <View style={styles.switcher}>
         <SegmentedControl<Section>
           value={section}

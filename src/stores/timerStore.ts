@@ -21,6 +21,17 @@ export interface FinishedSession {
   endedAt: number;
 }
 
+/** A finished focus session (for 독서 결산: time of day, sounds, rooms — kept even without a linked book). */
+export interface FocusSessionRecord {
+  endedAt: number;
+  minutes: number;
+  entryId: string | null;
+  sounds: string[];
+  room: string | null;
+}
+
+const HISTORY_LIMIT = 2000;
+
 interface TimerState {
   presetId: TimerPresetId;
   focusMin: number;
@@ -34,7 +45,9 @@ interface TimerState {
   entryId: string | null;
   lastSession: FinishedSession | null;
   today: { day: string; sessions: number; minutes: number };
+  history: FocusSessionRecord[];
 
+  recordSession: (record: FocusSessionRecord) => void;
   setPreset: (id: TimerPresetId, custom?: { focus: number; break: number }) => void;
   setPhase: (phase: TimerPhase) => void;
   linkEntry: (entryId: string | null) => void;
@@ -66,7 +79,9 @@ export const useTimerStore = create<TimerState>()(
       entryId: null,
       lastSession: null,
       today: { day: '', sessions: 0, minutes: 0 },
+      history: [],
 
+      recordSession: (record) => set((s) => ({ history: [...s.history, record].slice(-HISTORY_LIMIT) })),
       setPreset: (id, custom) => {
         const preset = TIMER_PRESETS.find((p) => p.id === id);
         const focusMin = clampMin(preset?.focus ?? custom?.focus ?? get().focusMin);
@@ -121,6 +136,7 @@ export const useTimerStore = create<TimerState>()(
         remainingMs: s.remainingMs,
         entryId: s.entryId,
         today: s.today,
+        history: s.history,
       }),
     },
   ),

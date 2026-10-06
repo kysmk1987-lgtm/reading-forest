@@ -101,6 +101,8 @@ npx vercel --prod --yes                                                         
 
 ### 2) 데이터베이스 만들기 (마이그레이션)
 - **간단한 방법**: 대시보드 **SQL Editor → New query**에 저장소의 **`supabase/setup.sql`** 내용을 통째로 붙여넣고 **Run**
+  - 이미 `setup.sql`(0001~0002)을 실행한 프로젝트는 새로 추가된 마이그레이션만 담긴 **`supabase/setup_0003.sql`**(4차: 문장 갤러리)만 실행하면 됩니다.
+  - `setup*.sql`은 `npm run build:sql`이 `supabase/migrations/`에서 자동으로 만듭니다(직접 고치지 마세요).
 - **CLI**: `npx supabase login` → `npx supabase link --project-ref <project-ref>` → `npx supabase db push` (`supabase/migrations/*.sql` 순서대로 적용)
 
 만들어지는 것:
@@ -112,6 +114,9 @@ npx vercel --prod --yes                                                         
 | `reading_logs` | 날짜별 독서 기록(읽은 쪽수, 3차부터 집중 시간) | 본인만 |
 | `forests` | 공개 숲(`share_slug`, `is_public`) | 공개된 숲은 누구나 조회, 주인만 수정 |
 | `waterings` | 물 주기 | 로그인(익명 포함) 사용자가 공개 숲에 추가. `unique(forest_id, visitor_id, watered_on)` → **하루 한 번** |
+| `quote_cards` (4차) | 문장 카드(책·문장·디자인·위치 %, 좋아요/스크랩/댓글 수) | 직접 조회는 **작성자만**. 다른 사람은 `gallery_feed()` RPC로만 봄(블러 처리) |
+| `card_likes` · `card_scraps` · `card_comments` · `card_reports` · `card_reveals` | 좋아요 · 스크랩 · 댓글 · 신고 · 스포일러 펼침 기록 | 본인 것만 쓰기, 볼 수 있는 카드에만 좋아요/댓글. 신고 3회 → 자동 숨김 |
+| Storage `cards`(비공개) · `cards-blur`(공개) | 카드 원본 PNG · 아주 작게 흐린 썸네일 | 업로드는 `내 uid/` 폴더에만. 원본은 **볼 수 있는 사람만** 서명 URL 발급 |
 
 - `get_public_forest(slug)` RPC: 공개 숲 페이지용(나무·물 준 횟수만, 한줄평/별점은 노출 안 함)
 - `monthly_reading_stats` 뷰: 월별 독서한 날·쪽수·완독 수 (통계/독서 결산용)
@@ -164,7 +169,10 @@ src/
 │  ├─ book/[id].tsx         # 책 상세 + 서재 담기
 │  ├─ forest/[userId].tsx   # 공개 숲 페이지 (읽기 전용 + 물 주기), /forest/demo = 데모 숲
 │  ├─ trees.tsx             # 나무 도감 (종류별 성장 단계)
-│  └─ gallery.tsx           # 문장 갤러리 (곧 만나요, 마이에서 진입)
+│  ├─ gallery.tsx           # 문장 갤러리 피드 (최신/인기/스크랩/내 카드, 책 필터)
+│  ├─ card/new.tsx          # 문구 카드 만들기 (OCR · 템플릿 · 글꼴 · 비율 · 저장/공유/올리기)
+│  ├─ card/[id].tsx         # 카드 상세 (스포일러 펼치기 · 좋아요 · 스크랩 · 댓글 · 신고)
+│  └─ wrapped.tsx           # 독서 DNA 결산 (스토리 슬라이드 · 페르소나 · 요약 카드 내보내기)
 ├─ config/                  # locale.ts(언어·지역), app.ts(API 주소)
 ├─ components/
 │  ├─ ui/                   # 디자인 시스템: Button(말랑 입체), Card, Chip, ProgressBar, Input, StarRating,
@@ -179,6 +187,9 @@ src/
 │  ├─ records/              # 독서 캘린더, 통계, 집계 함수
 │  ├─ together/             # 타이머, 한국 지도(Presence·응원), 테마 독서실, 지역(regions), 알림
 │  ├─ sound/                # 백색소음 목록, 믹서 엔진(.web = Web Audio), 볼륨 슬라이더
+│  ├─ gallery/              # 카드 템플릿·글꼴, QuoteCardView, 캡처(.web = html-to-image), OCR(.web = tesseract.js),
+│  │                        #   스마트 블러 규칙(blur.ts), Supabase API(api.ts), 번역 스텁(translate.ts)
+│  ├─ wrapped/              # 결산 집계(compute.ts), 페르소나 규칙(personas.ts), 샘플 데이터, 일러스트, 요약 카드
 │  └─ library/              # 기록 시트(4가지 상태), 서재 카드, 진행률 시트, 정렬, 성장 단계, 독서 로그, Supabase 동기화(cloudSync + syncMapping)
 ├─ lib/
 │  ├─ api/books.ts          # 지역별 검색 클라이언트 (KR → /api 프록시)
@@ -192,8 +203,50 @@ src/
 scripts/test-book-api.ts    # 도서 API 오프라인 테스트
 supabase/migrations/        # DB 스키마 + RLS (0001_init.sql …), setup.sql = 전부 합친 붙여넣기용 파일
 scripts/test-sync-mapping.ts # 서재 ⇄ Supabase 행 변환 오프라인 테스트
+scripts/test-gallery-wrapped.ts # 블러 규칙 · 쪽→% · OCR 정리 · 번역 한도 · 결산 집계/페르소나 테스트 (npm test)
 vercel.json                 # 빌드 설정, /api 제외 SPA 리라이트, 함수 설정
 ```
+
+## ✅ 4차 기능 — 문장 카드 · 갤러리 · 스마트 블러
+
+<p>
+  <img src="docs/screenshots/card-editor.png" width="160" alt="문구 카드 만들기" />
+  <img src="docs/screenshots/card-export.png" width="160" alt="내보낸 카드 PNG" />
+  <img src="docs/screenshots/gallery.png" width="160" alt="문장 갤러리" />
+  <img src="docs/screenshots/blur.png" width="160" alt="스마트 블러" />
+</p>
+
+**갤러리 위치 (탭 5개 유지)**: 탭은 숲 · 서재 · 기록 · 함께 읽기 · 마이 그대로 두고, **숲(홈)에 "✍️ 문장 갤러리" 카드**(카드 만들기 / 갤러리 구경)를 넣었습니다. 카드 만들기는 책을 읽다가 바로 하는 행동이라 첫 화면에서 한 번에 닿아야 하고, 기록·함께 읽기는 이미 꽉 찬 탭이라 6번째 탭을 만드는 대신 이렇게 했어요. **마이**에는 내 스크랩 · 내 카드 바로가기와 "읽지 않은 책의 문구도 가리기" 설정이 있습니다.
+
+- **문구 카드 메이커** (`app/card/new.tsx`)
+  - 서재에서 책 고르기(없으면 책 검색으로 이동), 문장 직접 입력(500자).
+  - **사진에서 글자 읽기(OCR)**: 웹은 [tesseract.js](https://github.com/naptha/tesseract.js) 5(kor+eng)를 **누를 때만** CDN에서 불러오고 진행률(도구 → 한국어 사전 → 인식 %)을 보여줍니다. 결과는 항상 고칠 수 있어요. 앱(iOS/Android)은 ML Kit/Vision 네이티브 모듈이 필요해서 **개발 빌드가 생기면** 붙일 예정이에요(지금은 안내 문구만 보여요, `features/gallery/ocr.ts`).
+  - 꾸미기: 템플릿 6종(종이 · 숲 · 밤하늘 · 수채화 무료, 벚꽃 · 바다 프리미엄🔒), 글꼴 6종(송명체 · 나눔손글씨 펜 · 주아체 무료, 개구체 · 연성체 · 도현체 프리미엄🔒), 글자 크기 S/M/L, 정렬, 책 제목·저자 표시, 작은 "🌳 독서의숲" 워터마크. 비율 **9:16 · 1:1 · 4:5**.
+  - **이미지 저장/공유**: 웹은 html-to-image로 1080px PNG를 만들고 글꼴을 base64로 넣어서 굽습니다. 공유는 Web Share(파일) → 안 되면 다운로드. 앱은 react-native-view-shot + expo-sharing / expo-media-library(사진첩 저장).
+  - 글꼴은 모두 [Google Fonts](https://fonts.google.com/)의 SIL Open Font License(OFL) 글꼴이고, 처음 고를 때만 불러옵니다.
+- **문장 갤러리** (`app/gallery.tsx`, `app/card/[id].tsx`): 최신/인기(좋아요 + 스크랩×2 + 댓글) 피드, 책별 필터, 카드 상세에서 좋아요 · 스크랩 · 댓글(삭제는 내 것만) · 신고(내 피드에서 바로 숨김, 3번 신고되면 모두에게 숨김) · 내 카드 삭제.
+- **스마트 블러 (스포일러 방지)**
+  - 카드를 올릴 때 **문장 위치**(쪽 또는 %)를 꼭 받아요. 쪽은 전체 쪽수로 %로 바꿉니다(전체 쪽수를 모르면 %로 입력).
+  - 내 진도가 카드 위치보다 낮으면 흐리게 + "아직 읽지 않은 부분이에요 (60% 지점)". **그래도 볼래요** → 확인 후 펼치기.
+  - 서재에 없는 책은 그대로 보이고, 마이의 **"읽지 않은 책의 문구도 가리기"**(기본 꺼짐)를 켜면 가려져요.
+  - **새지 않게 서버에서 처리**: `gallery_feed()`(security definer)가 가려야 할 카드는 `quote`와 원본 경로를 **null**로 주고, 흐린 썸네일 경로만 줍니다. 원본은 `reveal_card()`를 불러야 받을 수 있고, 이때 `card_reveals`에 기록돼요. `quote_cards` 테이블은 작성자만 직접 읽을 수 있고, 비공개 `cards` 버킷은 `card_object_visible()`을 통과한 사람만 서명 URL을 받을 수 있어요. 흐린 썸네일은 216px로 미리 흐리게 만든 JPEG라 글자를 읽을 수 없습니다.
+  - 알아둘 점: 이미 받은 서명 URL은 1시간 동안 유효하고, 내 진도는 서재 동기화 기준이라 오프라인으로 바꾼 진도는 동기화된 뒤에 반영돼요.
+- **번역**: 이번 단계에서는 외부 번역 API를 부르지 않습니다. `EXPO_PUBLIC_TRANSLATION_ENABLED`(기본 꺼짐) 플래그, 스텁 서비스(`features/gallery/translate.ts`), 무료 **하루 10회** 한도 훅만 준비했어요. 켜려면 서버 함수(`/api/translate`, 키는 서버에만)를 만들어 `translateText`에 연결하면 됩니다.
+
+## ✅ 5차 기능 (일부) — 독서 DNA 결산 리포트
+
+<p>
+  <img src="docs/screenshots/wrapped-1.png" width="160" alt="결산 슬라이드" />
+  <img src="docs/screenshots/wrapped-persona.png" width="160" alt="독서 페르소나" />
+  <img src="docs/screenshots/wrapped-share.png" width="160" alt="공유용 요약 카드" />
+</p>
+
+- **어디서**: 기록 탭 맨 위 배너(이번 달 결산 · 올해 결산 · 체험용 샘플 리포트), 숲(홈)에는 **매달 25일 이후와 12월**에만 배너가 나타나요.
+- **스토리 슬라이드** (`app/wrapped.tsx`): 화면을 누르거나 옆으로 밀어 넘기는 전체 화면 슬라이드, 상단 진행 막대, 숫자가 올라가는 애니메이션. 완독 권수 · 넘긴 페이지 · 집중 시간 · **"올해 당신의 숲에는 42그루의 나무가 심어졌어요"** · 가장 길게 이어 읽은 날 · 가장 많이 읽은 시간 · 가장 많이 들은 소리/독서실 · 가장 많이 읽은 분야(정보가 있을 때만) · 별점 1위 책 · 만든 문구 카드 수.
+- **소리 기록**: 타이머가 끝날 때 재생 중이던 백색소음과 독서실을 기록합니다(`timerStore.history`, 책이 연결되면 `reading_logs.sounds/room`도 저장).
+- **페르소나 8종** (`features/wrapped/personas.ts`): 심야의 사색가 · 새벽의 산책자 · 완독 마라토너 · 몰입의 잠수부 · 문장 수집가 · 꾸준한 정원사 · 햇살 아래 산책자 · 새싹 탐험가. 규칙을 순서대로 확인하고(연간은 기준을 크게 잡음), 각각 색과 SVG 일러스트가 있어요. 예: "새벽 2시에 빗소리를 들으며 읽는 '심야의 사색가'".
+- **요약 카드**: 9:16 / 1:1로 저장 · 공유(카드 메이커와 같은 캡처 방식). 기존 요금제 게이팅(`readingWrappedExport`)을 그대로 따라 **프리미엄**에서 열리며, 마이 → 프리미엄 미리보기(개발용)로 시험할 수 있어요.
+- 기록이 없으면 친절한 빈 화면 + **체험용 샘플 리포트** 버튼.
 
 ## ✅ 3차 기능 — 함께 읽기
 
@@ -264,8 +317,8 @@ vercel.json                 # 빌드 설정, /api 제외 SPA 리라이트, 함�
 | **1차** | 기반 + 기본 독서기록 ✅ |
 | **2차** | 독서 숲 — 성장 그래픽, 아이소메트릭 숲, 캘린더/통계, 물주기 ✅ (백엔드 Firebase → Supabase 전환) |
 | **3차** | 뽀모도로 · 백색소음 · 실시간 한국 지도(Presence) · 조용한 응원 · 테마 독서실 ✅ (세계 지도/3D 지구본은 `MAP_SCOPE=GLOBAL` 자리만 준비) |
-| **4차** | 문장 카드(OCR) · 갤러리 · 번역(Functions, 무료 하루 10회) · 스마트 블러 |
-| **5차** | 독서 결산 · 인앱 결제(RevenueCat)/광고(AdMob) · 출시 |
+| **4차** | 문장 카드(OCR) · 갤러리(댓글·스크랩·좋아요·신고) · 스마트 블러 ✅ (번역은 `TRANSLATION_ENABLED` 플래그·하루 10회 한도만 준비) |
+| **5차** | 독서 DNA 결산(월간·연간, 페르소나, 공유 카드) ✅ · 인앱 결제(RevenueCat)/광고(AdMob) · 출시 ⏳ |
 
 ## ☁️ 배포 (Vercel)
 

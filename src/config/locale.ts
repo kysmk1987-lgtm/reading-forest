@@ -39,3 +39,9 @@ export const BOOK_REGION: BookRegion = process.env.EXPO_PUBLIC_BOOK_REGION === '
 export type MapScope = 'KR' | 'GLOBAL';
 
 export const MAP_SCOPE: MapScope = process.env.EXPO_PUBLIC_MAP_SCOPE === 'GLOBAL' ? 'GLOBAL' : 'KR';
+
+/**
+ * Quote translation in the gallery (Korea-first launch: off). When enabled, `features/gallery/translate.ts`
+ * must be wired to a server translation endpoint; free users get `FREE_LIMITS.translationsPerDay` per day.
+ */
+export const TRANSLATION_ENABLED = process.env.EXPO_PUBLIC_TRANSLATION_ENABLED === 'true';

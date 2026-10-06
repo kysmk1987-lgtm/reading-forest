@@ -48,6 +48,9 @@ export default function RootLayout() {
               <Stack.Screen name="gallery" />
               <Stack.Screen name="trees" />
               <Stack.Screen name="room/[id]" />
+              <Stack.Screen name="card/new" />
+              <Stack.Screen name="card/[id]" />
+              <Stack.Screen name="wrapped" options={{ animation: 'fade' }} />
             </Stack>
             <PresenceBridge />
             <TimerWatcher />

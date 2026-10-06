@@ -48,6 +48,10 @@ export interface ReadingLog {
   pagesDelta: number;
   /** Focused reading minutes (timer sessions). */
   minutes?: number;
+  /** Ambient sounds playing when a timer session ended (`focus` logs). */
+  sounds?: string[];
+  /** Theme room the session happened in (`focus` logs). */
+  room?: string;
   createdAt: number;
 }
 

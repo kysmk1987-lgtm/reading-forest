@@ -11,6 +11,9 @@ interface SettingsState {
   language: AppLanguage | null;
   soundEnabled: boolean;
   hapticsEnabled: boolean;
+  /** Gallery: also blur quotes from books that are not in my library. */
+  blurUnownedQuotes: boolean;
+  setBlurUnownedQuotes: (enabled: boolean) => void;
   setLanguage: (language: AppLanguage | null) => void;
   setSoundEnabled: (enabled: boolean) => void;
   setHapticsEnabled: (enabled: boolean) => void;
@@ -22,6 +25,8 @@ export const useSettingsStore = create<SettingsState>()(
       language: null,
       soundEnabled: true,
       hapticsEnabled: true,
+      blurUnownedQuotes: false,
+      setBlurUnownedQuotes: (blurUnownedQuotes) => set({ blurUnownedQuotes }),
       setLanguage: (language) => set({ language }),
       setSoundEnabled: (soundEnabled) => set({ soundEnabled }),
       setHapticsEnabled: (hapticsEnabled) => set({ hapticsEnabled }),

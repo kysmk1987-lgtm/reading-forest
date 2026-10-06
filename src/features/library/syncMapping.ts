@@ -49,6 +49,9 @@ export interface ReadingLogRow {
   kind: ReadingLog['kind'];
   pages_delta: number;
   minutes: number;
+  /** Added in migration 0003 (only sent when present). */
+  sounds?: string[];
+  room?: string | null;
   created_at: string;
 }
 
@@ -151,7 +154,7 @@ export function rowToEntry(row: UserBookRow): LibraryEntry {
 }
 
 export function logToRow(log: ReadingLog, userId: string): ReadingLogRow {
-  return {
+  const row: ReadingLogRow = {
     user_id: userId,
     id: log.id,
     user_book_id: log.entryId,
@@ -162,6 +165,15 @@ export function logToRow(log: ReadingLog, userId: string): ReadingLogRow {
     minutes: Math.max(0, Math.min(600, Math.round(log.minutes ?? 0))),
     created_at: toIso(log.createdAt),
   };
+  if (log.sounds?.length) row.sounds = log.sounds.slice(0, 12).map((s) => s.slice(0, 24));
+  if (log.room) row.room = log.room.slice(0, 40);
+  return row;
+}
+
+/** Drops columns added in migration 0003 (for projects that have not applied it yet). */
+export function withoutSessionColumns(row: ReadingLogRow): ReadingLogRow {
+  const { sounds: _sounds, room: _room, ...rest } = row;
+  return rest;
 }
 
 export function rowToLog(row: ReadingLogRow): ReadingLog {
@@ -175,6 +187,8 @@ export function rowToLog(row: ReadingLogRow): ReadingLog {
     createdAt: toMs(row.created_at),
   };
   if (row.minutes) log.minutes = row.minutes;
+  if (row.sounds?.length) log.sounds = row.sounds;
+  if (row.room) log.room = row.room;
   return log;
 }
 

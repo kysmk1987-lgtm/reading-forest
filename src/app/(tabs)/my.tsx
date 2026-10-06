@@ -168,13 +168,14 @@ export default function MyScreen() {
         <SettingRow label={t('my.premiumDevToggle')} value={isPremium} onChange={setPremium} />
       </Card>
 
-      <Pressable
-        accessibilityRole="button"
-        onPress={() => {
-          tapFeedback();
-          router.push('/gallery');
-        }}>
-        <Card tint={palette.pinkSoft} edgeColor={palette.pinkDeep} style={styles.galleryCard}>
+      <Card tint={palette.pinkSoft} edgeColor={palette.pinkDeep} style={styles.section}>
+        <Pressable
+          accessibilityRole="button"
+          style={styles.galleryCard}
+          onPress={() => {
+            tapFeedback();
+            router.push('/gallery');
+          }}>
           <AppText style={styles.crown}>🖼️</AppText>
           <View style={styles.flex}>
             <AppText variant="subtitle">{t('gallery.title')}</AppText>
@@ -182,11 +183,13 @@ export default function MyScreen() {
               {t('my.galleryTeaser')}
             </AppText>
           </View>
-          <AppText variant="tiny" color={palette.pinkDeep}>
-            {t('common.comingSoon')}
-          </AppText>
-        </Card>
-      </Pressable>
+        </Pressable>
+        <View style={styles.row}>
+          <Button size="sm" variant="soft" label={`🔖 ${t('my.myScraps')}`} onPress={() => router.push({ pathname: '/gallery', params: { tab: 'scraps' } })} />
+          <Button size="sm" variant="soft" label={`🗂️ ${t('my.myCards')}`} onPress={() => router.push({ pathname: '/gallery', params: { tab: 'mine' } })} />
+          <Button size="sm" label={`✍️ ${t('gallery.make')}`} onPress={() => router.push('/card/new')} />
+        </View>
+      </Card>
 
       <RegionSetting />
 
@@ -207,6 +210,10 @@ export default function MyScreen() {
         ) : null}
         <SettingRow label={t('my.sound')} value={settings.soundEnabled} onChange={settings.setSoundEnabled} />
         <SettingRow label={t('my.haptics')} value={settings.hapticsEnabled} onChange={settings.setHapticsEnabled} />
+        <SettingRow label={t('my.blurUnowned')} value={settings.blurUnownedQuotes} onChange={settings.setBlurUnownedQuotes} />
+        <AppText variant="tiny" muted>
+          {t('my.blurUnownedHint')}
+        </AppText>
         <View style={styles.settingRow}>
           <AppText>{t('my.export')}</AppText>
           <AppText variant="caption" muted>

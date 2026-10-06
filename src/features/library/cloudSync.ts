@@ -12,6 +12,7 @@ import {
   planUpload,
   rowToEntry,
   rowToLog,
+  withoutSessionColumns,
   type BookRow,
   type ReadingLogRow,
   type UserBookRow,
@@ -43,10 +44,20 @@ async function upsertEntries(sb: SupabaseClient, userId: string, entries: Librar
 
 async function insertLogs(sb: SupabaseClient, userId: string, logs: ReadingLog[]) {
   if (!logs.length) return;
-  const { error } = await sb
-    .from('reading_logs')
-    .upsert(logs.map((l) => logToRow(l, userId)), { onConflict: 'user_id,id', ignoreDuplicates: true });
+  const rows = logs.map((l) => logToRow(l, userId));
+  const write = (r: ReadingLogRow[]) => sb.from('reading_logs').upsert(r, { onConflict: 'user_id,id', ignoreDuplicates: true });
+  let { error } = await write(rows);
+  // PGRST204: column not found — the project has not applied migration 0003 (sounds/room) yet.
+  if (error?.code === 'PGRST204') ({ error } = await write(rows.map(withoutSessionColumns)));
   if (error) throw error;
+}
+
+let initialSync: Promise<void> | null = null;
+
+/** Resolves once the first pull/upload after sign-in finished (or after `timeoutMs`), so server-side checks see local progress. */
+export async function awaitInitialSync(timeoutMs = 6000) {
+  if (!initialSync) return;
+  await Promise.race([initialSync.catch(() => {}), new Promise((r) => setTimeout(r, timeoutMs))]);
 }
 
 /** Pull remote rows, merge them locally, then upload local-only / newer data. */
@@ -73,11 +84,18 @@ export async function syncNow(userId: string) {
   await insertLogs(sb, userId, upload.logs);
 }
 
+/** Remote nickname wins only over a default guest nickname; otherwise the local one (incl. the guest name) is written. */
 async function syncProfile(sb: SupabaseClient, userId: string) {
-  const { data } = await sb.from('profiles').select('nickname').eq('id', userId).maybeSingle();
+  const { data, error: readError } = await sb.from('profiles').select('nickname').eq('id', userId).maybeSingle();
+  if (readError) throw readError;
   const { nickname, setNickname } = useProfileStore.getState();
-  if (data?.nickname && isDefaultNickname(nickname)) setNickname(data.nickname);
-  else await sb.from('profiles').update({ nickname, updated_at: new Date().toISOString() }).eq('id', userId);
+  if (data?.nickname && isDefaultNickname(nickname)) {
+    setNickname(data.nickname);
+    return;
+  }
+  if (data?.nickname === nickname) return;
+  const { error } = await sb.from('profiles').update({ nickname, updated_at: new Date().toISOString() }).eq('id', userId);
+  if (error) throw error;
 }
 
 export function startLibrarySync(userId: string): () => void {
@@ -89,7 +107,8 @@ export function startLibrarySync(userId: string): () => void {
     queue = queue.then(task).catch((err) => console.warn('[sync] write failed', err));
   };
 
-  enqueue(() => syncNow(userId));
+  initialSync = syncNow(userId);
+  enqueue(() => initialSync!);
   syncProfile(sb, userId).catch((err) => console.warn('[sync] profile failed', err));
 
   const unsubscribe = onLibraryMutation((event: LibraryMutation) => {

@@ -44,7 +44,23 @@
       "expo-localization",
       "expo-audio",
       "@react-native-community/datetimepicker",
-      "expo-asset"
+      "expo-asset",
+      "expo-sharing",
+      [
+        "expo-image-picker",
+        {
+          "photosPermission": "책 속 문장을 사진에서 읽어 문구 카드로 만들기 위해 사진에 접근해요.",
+          "cameraPermission": "책 속 문장을 촬영해 문구 카드로 만들기 위해 카메라를 사용해요."
+        }
+      ],
+      [
+        "expo-media-library",
+        {
+          "savePhotosPermission": "만든 문구 카드와 독서 결산 이미지를 사진첩에 저장해요.",
+          "isAccessMediaLocationEnabled": false,
+          "granularPermissions": ["photo"]
+        }
+      ]
     ],
     "experiments": {
       "typedRoutes": true,

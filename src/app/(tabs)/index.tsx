@@ -14,6 +14,7 @@ import { speciesOf } from '@/features/forest/species';
 import type { Weather } from '@/features/forest/WeatherLayer';
 import { currentPageOf, progressPercent } from '@/features/library/growth';
 import { STATUS_META } from '@/features/library/statusMeta';
+import { WrappedBanner } from '@/features/wrapped/WrappedBanner';
 import { useEntitlements } from '@/lib/entitlements';
 import { tapFeedback } from '@/lib/feedback';
 import { useForestStore } from '@/stores/forestStore';
@@ -134,6 +135,24 @@ export default function HomeScreen() {
         </View>
       </View>
 
+      <WrappedBanner variant="home" />
+
+      <Card tint={palette.pinkSoft} edgeColor={palette.pinkDeep} style={styles.galleryCard}>
+        <View style={styles.galleryHead}>
+          <AppText style={styles.galleryEmoji}>✍️</AppText>
+          <View style={styles.flex}>
+            <AppText variant="subtitle">{t('gallery.title')}</AppText>
+            <AppText variant="caption" muted>
+              {t('gallery.homeBody')}
+            </AppText>
+          </View>
+        </View>
+        <View style={styles.galleryButtons}>
+          <Button size="sm" label={`🖋️ ${t('gallery.make')}`} onPress={() => router.push('/card/new')} />
+          <Button size="sm" variant="soft" label={`🖼️ ${t('gallery.browse')}`} onPress={() => router.push('/gallery')} />
+        </View>
+      </Card>
+
       <View style={styles.section}>
         <AppText variant="subtitle">{t('home.continueReading')}</AppText>
         {summary.reading.length === 0 ? (
@@ -230,4 +249,8 @@ const styles = StyleSheet.create({
   readingInfo: { flex: 1, gap: 4 },
   readingTitle: { flexDirection: 'row', alignItems: 'center', gap: spacing.xs },
   flex: { flex: 1 },
+  galleryCard: { gap: spacing.sm },
+  galleryHead: { flexDirection: 'row', alignItems: 'center', gap: spacing.md },
+  galleryEmoji: { fontSize: 30, lineHeight: 38 },
+  galleryButtons: { flexDirection: 'row', gap: spacing.xs },
 });
