@@ -1,4 +1,5 @@
 import type { Book, LibraryEntry, ReadingLog, ReadingStatus, TreeSpeciesId } from '@/types';
+import { validGardenCoord } from '@/features/forest/layout';
 import { TREE_SPECIES_IDS } from '@/types';
 
 /** Row shapes of `supabase/migrations/0001_init.sql` (snake_case, timestamps as ISO strings). */
@@ -36,6 +37,9 @@ export interface UserBookRow {
   start_date: string | null;
   end_date: string | null;
   tree_species: string | null;
+  /** Added in migration 0004 (only sent when the tree was transplanted). */
+  garden_x?: number | null;
+  garden_y?: number | null;
   created_at: string;
   updated_at: string;
 }
@@ -100,7 +104,7 @@ export function bookToRow(book: Book): BookRow | null {
 }
 
 export function entryToRow(entry: LibraryEntry, userId: string): UserBookRow {
-  return {
+  const row: UserBookRow = {
     user_id: userId,
     id: entry.id,
     book_id: entry.book.id,
@@ -121,8 +125,18 @@ export function entryToRow(entry: LibraryEntry, userId: string): UserBookRow {
     created_at: toIso(entry.createdAt),
     updated_at: toIso(entry.updatedAt),
   };
+  if (validGardenCoord(entry.gardenX) && validGardenCoord(entry.gardenY)) {
+    row.garden_x = entry.gardenX;
+    row.garden_y = entry.gardenY;
+  }
+  return row;
 }
 
+/** Drops columns added in migration 0004 (for projects that have not applied it yet). */
+export function withoutGardenColumns(row: UserBookRow): UserBookRow {
+  const { garden_x: _x, garden_y: _y, ...rest } = row;
+  return rest;
+}
 function speciesOrUndefined(value: string | null | undefined): TreeSpeciesId | undefined {
   return value && (TREE_SPECIES_IDS as readonly string[]).includes(value) ? (value as TreeSpeciesId) : undefined;
 }
@@ -147,6 +161,10 @@ export function rowToEntry(row: UserBookRow): LibraryEntry {
     expectationNote: un(row.expectation_note),
     treeSpecies: speciesOrUndefined(row.tree_species),
   };
+  if (validGardenCoord(row.garden_x) && validGardenCoord(row.garden_y)) {
+    entry.gardenX = row.garden_x;
+    entry.gardenY = row.garden_y;
+  }
   for (const key of Object.keys(entry) as (keyof LibraryEntry)[]) {
     if (entry[key] === undefined) delete entry[key];
   }

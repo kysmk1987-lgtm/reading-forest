@@ -68,25 +68,73 @@ function Sprout() {
   );
 }
 
-function Trunk({ sp, cy, s, width, flare = 1.35 }: { sp: TreeSpecies; cy: number; s: number; width: number; flare?: number }) {
+function Trunk({ sp, cy, s, width }: { sp: TreeSpecies; cy: number; s: number; width: number }) {
   const top = cy + 8 * s;
-  const half = width / 2;
+  if (sp.trunkStyle === 'curved') {
+    // Palm: a leaning, ringed trunk that reaches the frond crown.
+    const w = width * 0.75;
+    const rings: ReactElement[] = [];
+    for (let i = 1; i < 6; i++) {
+      const t = i / 6;
+      const y = GROUND - (GROUND - cy) * t;
+      const x = 50 + 6 * s * Math.sin(t * 1.4);
+      rings.push(<Path key={i} d={`M${x - w * 0.55} ${y} Q${x} ${y + 1.6} ${x + w * 0.55} ${y}`} stroke="rgba(0,0,0,0.16)" strokeWidth={0.9} fill="none" />);
+    }
+    return (
+      <G>
+        <Path
+          d={`M${50 - w * 0.75} ${GROUND} Q${50 - w * 0.2 + 3 * s} ${(GROUND + cy) / 2} ${50 + 6 * s - w * 0.45} ${cy + 2} L${50 + 6 * s + w * 0.45} ${cy + 2} Q${50 + w * 0.6 + 4 * s} ${(GROUND + cy) / 2} ${50 + w * 0.75} ${GROUND} Z`}
+          fill={sp.trunk}
+        />
+        {rings}
+      </G>
+    );
+  }
+  const thick = sp.trunkStyle === 'thick';
+  const w = thick ? width * 2.1 : sp.trunkStyle === 'birch' ? width * 0.8 : width;
+  const flare = thick ? 1.2 : 1.35;
+  const half = w / 2;
   return (
     <G>
-      <Path
-        d={`M${50 - half * flare} ${GROUND} L${50 - half} ${top} L${50 + half} ${top} L${50 + half * flare} ${GROUND} Z`}
-        fill={sp.trunk}
-      />
-      <Path d={`M${50 + half * 0.2} ${top + 4} L${50 + half * 0.35} ${GROUND - 2}`} stroke="rgba(0,0,0,0.12)" strokeWidth={width * 0.25} />
-      {s >= 0.7 ? (
-        <Path d={`M50 ${top + 12 * s} Q60 ${top + 4 * s} 62 ${top - 2 * s}`} stroke={sp.trunk} strokeWidth={width * 0.4} strokeLinecap="round" fill="none" />
+      <Path d={`M${50 - half * flare} ${GROUND} L${50 - half} ${top} L${50 + half} ${top} L${50 + half * flare} ${GROUND} Z`} fill={sp.trunk} />
+      {sp.trunkStyle === 'birch' ? (
+        <G>
+          {[0.18, 0.36, 0.55, 0.74].map((t, i) => {
+            const y = top + (GROUND - top) * t;
+            const left = i % 2 === 0;
+            return (
+              <Path
+                key={i}
+                d={`M${left ? 50 - half : 50 + half * 0.1} ${y} L${left ? 50 - half * 0.1 : 50 + half} ${y + 0.6}`}
+                stroke="#3D3A36"
+                strokeWidth={1.3}
+                strokeLinecap="round"
+              />
+            );
+          })}
+          <Path d={`M${50 + half * 0.45} ${top + 2} L${50 + half * 0.55} ${GROUND - 2}`} stroke="rgba(0,0,0,0.08)" strokeWidth={w * 0.3} />
+        </G>
+      ) : (
+        <Path d={`M${50 + half * 0.2} ${top + 4} L${50 + half * 0.35} ${GROUND - 2}`} stroke="rgba(0,0,0,0.12)" strokeWidth={w * 0.25} />
+      )}
+      {s >= 0.7 && sp.trunkStyle !== 'birch' ? (
+        <Path d={`M50 ${top + 12 * s} Q60 ${top + 4 * s} 62 ${top - 2 * s}`} stroke={sp.trunk} strokeWidth={w * 0.4} strokeLinecap="round" fill="none" />
       ) : null}
     </G>
   );
 }
 
+/** Fan-shaped sector pointing down to (x, y) — the ginkgo leaf silhouette. */
+function fan(x: number, y: number, r: number, spread = 0.9) {
+  const a0 = -Math.PI / 2 - spread;
+  const a1 = -Math.PI / 2 + spread;
+  const p0 = [x + r * Math.cos(a0), y + r * Math.sin(a0)];
+  const p1 = [x + r * Math.cos(a1), y + r * Math.sin(a1)];
+  return `M${x} ${y} L${p0[0]} ${p0[1]} A${r} ${r} 0 0 1 ${p1[0]} ${p1[1]} Z`;
+}
+
 function Canopy({ sp, cx, cy, s }: { sp: TreeSpecies; cx: number; cy: number; s: number }) {
-  switch (sp.id) {
+  switch (sp.shape) {
     case 'pine': {
       const tiers: ReactElement[] = [];
       for (let i = 0; i < 3; i++) {
@@ -142,14 +190,77 @@ function Canopy({ sp, cx, cy, s }: { sp: TreeSpecies; cx: number; cy: number; s:
           <Circle cx={cx + 10 * s} cy={cy - 4 * s} r={5 * s} fill={sp.leafLight} />
         </G>
       );
+    case 'ginkgo':
+      // A tall crown built from overlapping golden fans.
+      return (
+        <G>
+          <Path d={fan(cx, cy + 22 * s, 36 * s, 0.55)} fill={sp.leafDark} />
+          <Path d={fan(cx - 9 * s, cy + 12 * s, 21 * s)} fill={sp.leaf} />
+          <Path d={fan(cx + 9 * s, cy + 12 * s, 21 * s)} fill={sp.leaf} />
+          <Path d={fan(cx, cy + 4 * s, 22 * s)} fill={sp.leaf} />
+          <Path d={fan(cx - 4 * s, cy - 6 * s, 10 * s)} fill={sp.leafLight} />
+          <Path d={fan(cx + 10 * s, cy + 6 * s, 7 * s)} fill={sp.leafLight} opacity={0.85} />
+        </G>
+      );
+    case 'birch':
+      // Slender, airy crown of narrow ovals.
+      return (
+        <G>
+          <Ellipse cx={cx} cy={cy + 2 * s} rx={15 * s} ry={24 * s} fill={sp.leafDark} />
+          <Ellipse cx={cx - 8 * s} cy={cy + 6 * s} rx={9 * s} ry={14 * s} fill={sp.leaf} />
+          <Ellipse cx={cx + 8 * s} cy={cy + 2 * s} rx={9 * s} ry={15 * s} fill={sp.leaf} />
+          <Ellipse cx={cx} cy={cy - 10 * s} rx={9 * s} ry={13 * s} fill={sp.leaf} />
+          <Ellipse cx={cx - 4 * s} cy={cy - 14 * s} rx={3.5 * s} ry={6 * s} fill={sp.leafLight} opacity={0.9} />
+          <Ellipse cx={cx + 9 * s} cy={cy + 2 * s} rx={2.5 * s} ry={5 * s} fill={sp.leafLight} opacity={0.8} />
+        </G>
+      );
+    case 'palm': {
+      // Drooping fronds radiating from the crown.
+      const x = cx + 6 * s;
+      const y = cy + 2;
+      const fronds: [number, number, number][] = [
+        [-30, 10, 1],
+        [30, 10, 1],
+        [-22, -8, 0],
+        [22, -8, 0],
+        [-6, -16, 0],
+        [8, -15, 1],
+      ];
+      return (
+        <G>
+          {fronds.map(([dx, dy, dark], i) => {
+            const ex = x + dx * s;
+            const ey = y + dy * s;
+            const mx = x + dx * 0.5 * s;
+            const my = y + (dy - 14) * s * 0.6;
+            return (
+              <G key={i}>
+                <Path d={`M${x} ${y} Q${mx} ${my - 6 * s} ${ex} ${ey} Q${mx} ${my + 4 * s} ${x} ${y} Z`} fill={dark ? sp.leafDark : sp.leaf} />
+                <Path d={`M${x} ${y} Q${mx} ${my - 1 * s} ${ex} ${ey}`} stroke={sp.leafLight} strokeWidth={0.9 * s} fill="none" />
+              </G>
+            );
+          })}
+        </G>
+      );
+    }
+    case 'magnolia':
+      // Rounded vase shape with leathery leaves.
+      return (
+        <G>
+          <Ellipse cx={cx} cy={cy + 6 * s} rx={24 * s} ry={17 * s} fill={sp.leafDark} />
+          <Ellipse cx={cx - 12 * s} cy={cy} rx={13 * s} ry={11 * s} fill={sp.leaf} />
+          <Ellipse cx={cx + 12 * s} cy={cy} rx={13 * s} ry={11 * s} fill={sp.leaf} />
+          <Ellipse cx={cx} cy={cy - 9 * s} rx={15 * s} ry={11 * s} fill={sp.leaf} />
+          <Ellipse cx={cx - 7 * s} cy={cy - 13 * s} rx={6 * s} ry={3.5 * s} fill={sp.leafLight} opacity={0.85} />
+        </G>
+      );
     default:
-      // round & apple
       return (
         <G>
           <Circle cx={cx} cy={cy + 7 * s} r={21 * s} fill={sp.leafDark} />
           <Circle cx={cx - 14 * s} cy={cy + 4 * s} r={14 * s} fill={sp.leaf} />
           <Circle cx={cx + 14 * s} cy={cy + 4 * s} r={14 * s} fill={sp.leaf} />
-          <Circle cx={cx} cy={cy - 5 * s} r={sp.id === 'apple' ? 17 * s : 19 * s} fill={sp.leaf} />
+          <Circle cx={cx} cy={cy - 5 * s} r={sp.bloomStyle === 'fruit' ? 17 * s : 19 * s} fill={sp.leaf} />
           <Circle cx={cx - 7 * s} cy={cy - 11 * s} r={7 * s} fill={sp.leafLight} opacity={0.85} />
         </G>
       );
@@ -157,28 +268,71 @@ function Canopy({ sp, cx, cy, s }: { sp: TreeSpecies; cx: number; cy: number; s:
 }
 
 function Blooms({ sp, cx, cy, s }: { sp: TreeSpecies; cx: number; cy: number; s: number }) {
+  if (sp.bloomStyle === 'coconut') {
+    const x = cx + 6 * s;
+    const y = cy + 6 * s;
+    return (
+      <G>
+        {[
+          [-3.2, 0],
+          [3.2, 0],
+          [0, 3.4],
+        ].map(([dx, dy], i) => (
+          <G key={i}>
+            <Circle cx={x + dx * s} cy={y + dy * s} r={3.6 * s} fill={sp.bloom} />
+            <Circle cx={x + dx * s - 1.1 * s} cy={y + dy * s - 1.1 * s} r={1.1 * s} fill={sp.bloomAccent} />
+          </G>
+        ))}
+      </G>
+    );
+  }
   return (
     <G>
       {BLOOM_SPOTS.map(([dx, dy], i) => {
-        const x = cx + dx * s;
+        const x = cx + dx * s * (sp.shape === 'birch' ? 0.6 : 1);
         const y = cy + dy * s;
-        if (sp.id === 'apple') {
-          return (
-            <G key={i}>
-              <Circle cx={x} cy={y} r={3.4 * s} fill={sp.bloom} />
-              <Circle cx={x - 1 * s} cy={y - 1.1 * s} r={1 * s} fill={sp.bloomAccent} opacity={0.8} />
-            </G>
-          );
+        switch (sp.bloomStyle) {
+          case 'fruit':
+            return (
+              <G key={i}>
+                <Circle cx={x} cy={y} r={3.4 * s} fill={sp.bloom} />
+                <Circle cx={x - 1 * s} cy={y - 1.1 * s} r={1 * s} fill={sp.bloomAccent} opacity={0.8} />
+              </G>
+            );
+          case 'cone':
+            return <Ellipse key={i} cx={x * 0.92 + cx * 0.08} cy={y + 4 * s} rx={1.8 * s} ry={2.8 * s} fill={sp.bloom} />;
+          case 'nut':
+            return (
+              <G key={i}>
+                <Circle cx={x - 1.4 * s} cy={y + 2 * s} r={2.2 * s} fill={sp.bloom} />
+                <Circle cx={x + 1.6 * s} cy={y + 2.6 * s} r={2.2 * s} fill={sp.bloom} />
+                <Circle cx={x - 2 * s} cy={y + 1.3 * s} r={0.7 * s} fill={sp.bloomAccent} />
+              </G>
+            );
+          case 'catkin':
+            return (
+              <G key={i}>
+                <Path d={`M${x} ${y - 2 * s} L${x} ${y}`} stroke={sp.bloomAccent} strokeWidth={0.6 * s} />
+                <Ellipse cx={x} cy={y + 2.8 * s} rx={1.3 * s} ry={3.2 * s} fill={sp.bloom} />
+              </G>
+            );
+          case 'bigFlower':
+            if (i % 2 === 1 && i !== 3) return null;
+            return (
+              <G key={i}>
+                <Path d={`M${x - 4.2 * s} ${y - 3 * s} Q${x - 4.6 * s} ${y + 3.4 * s} ${x} ${y + 3.6 * s} Q${x + 4.6 * s} ${y + 3.4 * s} ${x + 4.2 * s} ${y - 3 * s} Q${x + 2 * s} ${y} ${x} ${y - 4.6 * s} Q${x - 2 * s} ${y} ${x - 4.2 * s} ${y - 3 * s} Z`} fill={sp.bloom} />
+                <Path d={`M${x} ${y - 4.6 * s} Q${x - 1.4 * s} ${y} ${x} ${y + 3.6 * s}`} stroke={sp.bloomAccent} strokeWidth={1.1 * s} fill="none" />
+                <Path d={`M${x - 4.2 * s} ${y - 3 * s} Q${x - 4.6 * s} ${y + 3.4 * s} ${x} ${y + 3.6 * s}`} stroke={sp.bloomAccent} strokeWidth={0.9 * s} fill="none" opacity={0.8} />
+              </G>
+            );
+          default:
+            return (
+              <G key={i}>
+                <Circle cx={x} cy={y} r={2.8 * s} fill={sp.bloom} />
+                <Circle cx={x} cy={y} r={1.1 * s} fill={sp.bloomAccent} />
+              </G>
+            );
         }
-        if (sp.id === 'pine') {
-          return <Ellipse key={i} cx={x * 0.92 + cx * 0.08} cy={y + 4 * s} rx={1.8 * s} ry={2.8 * s} fill={sp.bloom} />;
-        }
-        return (
-          <G key={i}>
-            <Circle cx={x} cy={y} r={2.8 * s} fill={sp.bloom} />
-            <Circle cx={x} cy={y} r={1.1 * s} fill={sp.bloomAccent} />
-          </G>
-        );
       })}
     </G>
   );
@@ -214,7 +368,7 @@ function Pot() {
 
 /** Illustrated tree for a growth stage (pure SVG so it renders on native and web). */
 export const TreeGraphic = memo(function TreeGraphic({ stage, species, variant = 'growing', size = 96 }: TreeGraphicProps) {
-  const sp = TREE_SPECIES[species];
+  const sp = TREE_SPECIES[species] ?? TREE_SPECIES.round;
   const shape = STAGE_SHAPE[stage];
   let body: ReactElement;
   if (variant === 'withered') body = <Withered />;
@@ -225,7 +379,7 @@ export const TreeGraphic = memo(function TreeGraphic({ stage, species, variant =
     const { s, cy, trunk } = shape!;
     body = (
       <G>
-        <Trunk sp={sp} cy={cy} s={s} width={sp.id === 'baobab' ? trunk * 2.1 : trunk} flare={sp.id === 'baobab' ? 1.2 : 1.35} />
+        <Trunk sp={sp} cy={cy} s={s} width={trunk} />
         <Canopy sp={sp} cx={50} cy={cy} s={s} />
         {stage === 'bloom' ? <Blooms sp={sp} cx={50} cy={cy} s={s} /> : null}
       </G>

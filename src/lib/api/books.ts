@@ -54,6 +54,22 @@ export async function searchBooks(query: string, mode: SearchMode, signal?: Abor
   return { books, source: 'openlibrary' };
 }
 
+export interface BestsellerResult {
+  books: Book[];
+  /** `data4library`: 도서관 정보나루 인기대출도서; `curated`: our hand-picked list of recent bestsellers. */
+  source: 'data4library' | 'curated';
+}
+
+export async function fetchBestsellers(signal?: AbortSignal): Promise<BestsellerResult> {
+  return callApi<BestsellerResult>('/api/books/bestsellers', signal);
+}
+
+/** A typed query that is really an ISBN (hyphens/spaces allowed) is looked up by ISBN. */
+export function looksLikeIsbn(query: string) {
+  const digits = query.replace(/[-\s]/g, '');
+  return /^(97[89]\d{10}|\d{9}[\dXx])$/.test(digits);
+}
+
 /** Full book info by id (`kr_{ISBN}` → merged Aladin/Kakao/Naver detail). */
 export async function fetchBookById(id: string, signal?: AbortSignal): Promise<Book | null> {
   if (id.startsWith('kr_')) {

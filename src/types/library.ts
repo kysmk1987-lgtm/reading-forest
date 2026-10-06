@@ -26,11 +26,25 @@ export interface LibraryEntry {
   expectationNote?: string;
   /** Tree species shown in the forest; defaults to a basic species derived from the book id. */
   treeSpecies?: TreeSpeciesId;
+  /** Tile the reader planted the tree on (옮겨 심기); unset = automatic placement. */
+  gardenX?: number;
+  gardenY?: number;
 }
 
 export type LibraryEntryDraft = Omit<LibraryEntry, 'id' | 'createdAt' | 'updatedAt'>;
 
-export const TREE_SPECIES_IDS = ['round', 'pine', 'apple', 'cherry', 'baobab', 'maple'] as const;
+export const TREE_SPECIES_IDS = [
+  'round',
+  'pine',
+  'apple',
+  'cherry',
+  'baobab',
+  'maple',
+  'ginkgo',
+  'birch',
+  'palm',
+  'magnolia',
+] as const;
 export type TreeSpeciesId = (typeof TREE_SPECIES_IDS)[number];
 
 /** `add`: started/added a book, `progress`: pages read, `complete`: finished the book, `focus`: a timer session. */

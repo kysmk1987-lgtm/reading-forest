@@ -1,6 +1,7 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
 
+import { validGardenCoord, type Tile } from '@/features/forest/layout';
 import { growthStageFor, progressPercent, stageIndex } from '@/features/library/growth';
 import { backfillLogs, logsForChange, type ReadingLogDraft } from '@/features/library/readingLog';
 import { persistStorage } from '@/lib/storage';
@@ -52,6 +53,8 @@ interface LibraryState {
   addFocusLog: (entryId: string, minutes: number, date: string, extra?: { sounds?: string[]; room?: string }) => void;
   /** Merge remote entries (last write wins by `updatedAt`) and logs (union by id). */
   mergeRemote: (remote: { entries: LibraryEntry[]; logs: ReadingLog[] }) => void;
+  /** 옮겨 심기: saves garden tiles (only entries whose tile changed are touched). */
+  plantTrees: (positions: Record<string, Tile>) => void;
 }
 
 interface PersistedV0 {
@@ -114,16 +117,40 @@ export const useLibraryStore = create<LibraryState>()(
           return { entries, logs };
         });
       },
+      plantTrees: (positions) => {
+        const now = Date.now();
+        const changed: LibraryEntry[] = [];
+        const entries = { ...get().entries };
+        for (const [id, tile] of Object.entries(positions)) {
+          const current = entries[id];
+          if (!current || (current.gardenX === tile.c && current.gardenY === tile.r)) continue;
+          const entry = { ...current, gardenX: tile.c, gardenY: tile.r, updatedAt: now };
+          entries[id] = entry;
+          changed.push(entry);
+        }
+        if (!changed.length) return;
+        set({ entries });
+        changed.forEach((entry) => emit({ type: 'upsert', entry, logs: [] }));
+      },
     }),
     {
       name: 'rf-library',
       storage: persistStorage,
-      version: 1,
-      // v0 had no reading logs: rebuild them from the saved entries.
+      version: 2,
       migrate: (persisted, version) => {
         const state = (persisted ?? {}) as PersistedV0;
+        // v0 had no reading logs: rebuild them from the saved entries.
         if (version < 1) {
           state.logs = toLogs(backfillLogs(Object.values(state.entries ?? {})));
+        }
+        // v2 added garden tiles (옮겨 심기): keep only valid, paired coordinates.
+        if (version < 2) {
+          for (const entry of Object.values(state.entries ?? {})) {
+            if (!validGardenCoord(entry.gardenX) || !validGardenCoord(entry.gardenY)) {
+              delete entry.gardenX;
+              delete entry.gardenY;
+            }
+          }
         }
         return state as LibraryState;
       },

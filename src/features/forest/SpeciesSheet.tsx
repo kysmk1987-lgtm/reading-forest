@@ -6,9 +6,9 @@ import { useEntitlements } from '@/lib/entitlements';
 import { tapFeedback } from '@/lib/feedback';
 import { useLibraryStore } from '@/stores/libraryStore';
 import { colors, palette, radius, spacing } from '@/theme';
-import { TREE_SPECIES_IDS, type TreeSpeciesId } from '@/types';
+import type { TreeSpeciesId } from '@/types';
 
-import { TREE_SPECIES } from './species';
+import { SPECIES_IDS, TREE_SPECIES } from './species';
 import { TreeGraphic } from './TreeGraphic';
 
 /** Pick a tree species for one book; premium species are shown but locked for free users. */
@@ -35,7 +35,7 @@ export function SpeciesSheet({ entryId, current, onClose }: { entryId: string | 
         {t('forest.speciesHint')}
       </AppText>
       <View style={styles.grid}>
-        {TREE_SPECIES_IDS.map((id) => {
+        {SPECIES_IDS.map((id) => {
           const sp = TREE_SPECIES[id];
           const locked = sp.premium && !unlocked;
           const active = current === id;

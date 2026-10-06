@@ -1,7 +1,8 @@
 import { useQuery } from '@tanstack/react-query';
 import { useEffect, useMemo } from 'react';
 
-import { BookApiError, fetchBookById, searchBooks, type SearchMode } from '@/lib/api/books';
+import { BOOK_REGION } from '@/config/locale';
+import { BookApiError, fetchBestsellers, fetchBookById, searchBooks, type SearchMode } from '@/lib/api/books';
 import { useBookCacheStore } from '@/stores/bookCacheStore';
 import { findEntryByBookId, useLibraryStore } from '@/stores/libraryStore';
 import type { Book } from '@/types';
@@ -21,6 +22,22 @@ export function useBookSearch(query: string, mode: SearchMode) {
     retry: shouldRetry,
     queryFn: async ({ signal }) => {
       const result = await searchBooks(trimmed, mode, signal);
+      remember(result.books);
+      return result;
+    },
+  });
+}
+
+/** 베스트셀러 추천 (Korea only; served by `/api/books/bestsellers`, cached 6h on the CDN). */
+export function useBestsellers() {
+  const remember = useBookCacheStore((s) => s.remember);
+  return useQuery({
+    queryKey: ['bestsellers'],
+    enabled: BOOK_REGION === 'KR',
+    staleTime: 1000 * 60 * 60 * 6,
+    retry: shouldRetry,
+    queryFn: async ({ signal }) => {
+      const result = await fetchBestsellers(signal);
       remember(result.books);
       return result;
     },

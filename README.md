@@ -2,7 +2,7 @@
 
 > 책을 읽으면 나무가 자라는 독서 기록 앱
 
-따뜻한 파스텔 자연 팔레트(잔디 초록 · 나무 · 베이지), 동글동글한 폰트, 눌리면 쏙 들어가는 말랑한 입체 버튼, 가벼운 탭 사운드와 진동으로 "책 읽는 숲"을 키워가는 앱입니다. 현재는 **한국 출시 버전**(한국어 UI · 국내 도서 검색)입니다.
+따뜻한 파스텔 자연 팔레트(잔디 초록 · 나무 · 베이지), 동글동글한 폰트, 눌리면 쏙 들어가는 말랑한 입체 버튼, 가벼운 탭 사운드와 진동(앱에서는 항상 켜짐)으로 "책 읽는 숲"을 키워가는 앱입니다. 현재는 **한국 출시 버전**(한국어 UI · 국내 도서 검색)입니다.
 
 <p>
   <img src="docs/screenshots/forest.png" width="180" alt="나만의 독서 숲" />
@@ -52,8 +52,12 @@ npx expo start --web    # 바로 웹으로 실행 (http://localhost:8081)
 | `KAKAO_REST_API_KEY` | ✅ **등록됨** (Production·Preview·Development) | **기본 검색** (제목·저자·출판사·ISBN, 표지, 소개, 정가, 출간일, 옮긴이). **쪽수는 제공하지 않음** | [Kakao Developers](https://developers.kakao.com) 로그인 → 내 애플리케이션 → 애플리케이션 추가 → 앱 키의 **REST API 키** 복사. ⚠️ 키 설정의 **허용 IP(클라이언트 IP) 제한은 켜지 마세요** — Vercel 서버 IP는 고정이 아닙니다 |
 | `ALADIN_TTB_KEY` | ⛔ **종료 예정** | 상세 보강 (큰 표지, 쪽수, 분류) | 알라딘 OpenAPI는 신규 키 발급이 2026-09-04에 끝났고 서비스가 **2026-10-30 종료**됩니다. 기존 키가 있다면 그때까지만 동작하며, 없어도 앱은 정상 동작합니다 |
 | `NAVER_CLIENT_ID` / `NAVER_CLIENT_SECRET` | 선택 | 예비 검색 | [Naver Developers](https://developers.naver.com/apps) → 애플리케이션 등록 → 사용 API에서 **검색** 선택 → Client ID / Secret 복사 |
+| `NL_CERT_KEY` | 권장 | **쪽수 자동 채우기 1순위** (국립중앙도서관 ISBN 서지정보 `PAGE`) | [국립중앙도서관 Open API](https://www.nl.go.kr/NL/contents/N31101030700.do) → 회원가입·로그인 → **인증키 신청**(ISBN 서지정보) → 마이페이지에서 승인된 `cert_key` 복사 |
+| `DATA4LIBRARY_KEY` | 권장 | **베스트셀러(도서관 인기 대출)** + 쪽수 2순위 | [도서관 정보나루](https://www.data4library.kr) → 회원가입·로그인 → 마이페이지 → **인증키 신청**(이용 목적 입력, 승인 후 `authKey` 발급, 보통 1일 이내) |
 
-**쪽수가 없는 책**: 카카오는 쪽수를 주지 않으므로, 서재에 담을 때(읽고 있는 책) 또는 진행률을 업데이트할 때 **전체 쪽수를 직접 입력**할 수 있습니다. 입력한 쪽수로 진행률(%)과 성장 단계가 계산됩니다. 쪽수 자동 보강이 필요하면 추후 **국립중앙도서관 ISBN 서지정보 API**(무료, 쪽수 포함)를 연동하는 방안이 있습니다.
+**쪽수 자동 채우기**: 책 상세(`/api/books/{ISBN}`)는 **국립중앙도서관 서지정보(`NL_CERT_KEY`) → 도서관 정보나루 상세(`DATA4LIBRARY_KEY`, 쪽수가 들어있는 책만) → 알라딘** 순서로 쪽수를 찾아 채웁니다. 기록 시트의 **현재 진행** 줄에 "전체 N쪽"이 보이고, 쪽수를 못 찾으면 **"쪽수 정보가 없어요 · 직접 입력"** 링크와 % 입력으로 바뀝니다(키가 없어도 앱은 정상 동작).
+
+**베스트셀러 추천** (`/api/books/bestsellers`, 6시간 캐시): `DATA4LIBRARY_KEY`가 있으면 최근 30일 **도서관 인기 대출** 순위를 카카오로 표지·정보를 채워서 보여주고("도서관에서 많이 빌린 책"), 없으면 `src/config/bestsellers.ts`의 **직접 고른 목록**(카카오로 ISBN 확인)을 "요즘 많이 읽는 책"으로 보여줍니다.
 
 Vercel에 등록 (`--value`로 넘기면 프롬프트 없이 등록되고 줄바꿈도 섞이지 않습니다):
 
@@ -62,6 +66,8 @@ npx vercel env add KAKAO_REST_API_KEY production --value "<키>" --sensitive --y
 npx vercel env add KAKAO_REST_API_KEY preview --value "<키>" --sensitive --yes
 npx vercel env add NAVER_CLIENT_ID production --value "<ID>" --sensitive --yes          # 선택
 npx vercel env add NAVER_CLIENT_SECRET production --value "<SECRET>" --sensitive --yes  # 선택
+npx vercel env add NL_CERT_KEY production --value "<cert_key>" --sensitive --yes        # 쪽수
+npx vercel env add DATA4LIBRARY_KEY production --value "<authKey>" --sensitive --yes    # 베스트셀러 + 쪽수
 npx vercel --prod --yes                                                                  # 재배포해야 적용됩니다
 ```
 
@@ -72,7 +78,8 @@ npx vercel --prod --yes                                                         
 | 경로 | 설명 |
 | --- | --- |
 | `GET /api/books/search?q=검색어&field=keyword\|title\|author\|publisher\|isbn` | 국내 도서 검색. 응답 `{ books, source }`, 10분 캐시 |
-| `GET /api/books/{ISBN}` | 상세 정보 (카카오 + 네이버 병합, 알라딘 키가 있으면 쪽수·분류 보강: 표지, 소개, 저자/옮긴이, 정가, 서점 링크), 1일 캐시 |
+| `GET /api/books/{ISBN}` | 상세 정보 (카카오 + 네이버 병합, 쪽수는 국립중앙도서관 → 정보나루 → 알라딘 순서로 보강: 표지, 소개, 저자/옮긴이, 정가, 서점 링크), 1일 캐시 |
+| `GET /api/books/bestsellers` | 베스트셀러 추천 `{ books, source: 'data4library' \| 'curated' }`, 6시간 캐시 |
 
 오류 응답은 `{ error: { code, message } }` 형식이며 `code`는 `NO_KEYS`, `BAD_REQUEST`, `NOT_FOUND`, `RATE_LIMITED`, `UPSTREAM` 중 하나입니다. 앱은 코드별로 한국어 안내를 보여줍니다.
 
@@ -102,6 +109,7 @@ npx vercel --prod --yes                                                         
 ### 2) 데이터베이스 만들기 (마이그레이션)
 - **간단한 방법**: 대시보드 **SQL Editor → New query**에 저장소의 **`supabase/setup.sql`** 내용을 통째로 붙여넣고 **Run**
   - 이미 `setup.sql`(0001~0002)을 실행한 프로젝트는 새로 추가된 마이그레이션만 담긴 **`supabase/setup_0003.sql`**(4차: 문장 갤러리)만 실행하면 됩니다.
+  - 0003까지 실행한 프로젝트는 **`supabase/setup_0004.sql`**(나무 옮겨심기 위치 + 책 리뷰)만 실행하면 됩니다. 실행 전에도 앱은 동작하며, 리뷰 탭은 "준비 중" 안내와 내 기록만 보여주고 나무 위치는 이 기기에만 저장됩니다.
   - `setup*.sql`은 `npm run build:sql`이 `supabase/migrations/`에서 자동으로 만듭니다(직접 고치지 마세요).
 - **CLI**: `npx supabase login` → `npx supabase link --project-ref <project-ref>` → `npx supabase db push` (`supabase/migrations/*.sql` 순서대로 적용)
 
@@ -117,6 +125,9 @@ npx vercel --prod --yes                                                         
 | `quote_cards` (4차) | 문장 카드(책·문장·디자인·위치 %, 좋아요/스크랩/댓글 수) | 직접 조회는 **작성자만**. 다른 사람은 `gallery_feed()` RPC로만 봄(블러 처리) |
 | `card_likes` · `card_scraps` · `card_comments` · `card_reports` · `card_reveals` | 좋아요 · 스크랩 · 댓글 · 신고 · 스포일러 펼침 기록 | 본인 것만 쓰기, 볼 수 있는 카드에만 좋아요/댓글. 신고 3회 → 자동 숨김 |
 | Storage `cards`(비공개) · `cards-blur`(공개) | 카드 원본 PNG · 아주 작게 흐린 썸네일 | 업로드는 `내 uid/` 폴더에만. 원본은 **볼 수 있는 사람만** 서명 URL 발급 |
+| `book_reviews` (6차) | 책 리뷰(ISBN · 별점 0.5 단위 · 500자 · 닉네임), 사람당 책 하나에 하나 | 직접 조회·삭제는 **본인만**. 작성은 `upsert_book_review()`, 다른 사람 리뷰는 `book_review_summary()` · `book_reviews_feed()` RPC로만 봄 |
+| `book_review_reports` (6차) | 리뷰 신고 | 남의 리뷰만 신고, 3번 신고되면 자동 숨김 |
+| `user_books.garden_x/garden_y` (6차) | 숲에서 나무가 심긴 칸(0~11) | `user_books`와 같음 |
 
 - `get_public_forest(slug)` RPC: 공개 숲 페이지용(나무·물 준 횟수만, 한줄평/별점은 노출 안 함)
 - `monthly_reading_stats` 뷰: 월별 독서한 날·쪽수·완독 수 (통계/독서 결산용)
@@ -159,18 +170,19 @@ Vercel → Project → Settings → Environment Variables(Production/Preview/Dev
 api/                        # Vercel 서버리스 함수 (도서 검색 프록시, 키는 서버에만 존재)
 ├─ books/search.ts          # GET /api/books/search
 ├─ books/[isbn].ts          # GET /api/books/{ISBN}
-└─ _lib/                    # providers(카카오·알라딘·네이버), 병합, ISBN 처리, 응답/캐시 헬퍼
+├─ books/bestsellers.ts     # GET /api/books/bestsellers
+└─ _lib/                    # providers(카카오·알라딘·네이버), pages(국립중앙도서관·정보나루 쪽수/인기 대출), 병합, ISBN, 캐시
 src/
 ├─ app/                     # Expo Router 라우트 (파일 = 화면)
 │  ├─ _layout.tsx           # 폰트·QueryClient·Auth 리스너·Stack, 웹에서는 모바일 폭(480px)으로 중앙 정렬
 │  ├─ (tabs)/               # 하단 탭: 숲(index) · 서재 · 기록(records: 캘린더·통계) · 함께 읽기(together) · 마이
 │  ├─ room/[id].tsx         # 테마 독서실 (일러스트 + 같은 방 독서가 + 미니 타이머)
-│  ├─ search.tsx            # 책 검색 (제목/저자, ISBN, 바코드는 추후)
-│  ├─ book/[id].tsx         # 책 상세 + 서재 담기
+│  ├─ search.tsx            # 책 검색 (입력창 하나: 제목/저자/출판사, ISBN을 넣어도 검색) + 베스트셀러 추천
+│  ├─ book/[id].tsx         # 책 상세 + 서재 담기 + 책 소개 | 리뷰 탭
 │  ├─ forest/[userId].tsx   # 공개 숲 페이지 (읽기 전용 + 물 주기), /forest/demo = 데모 숲
 │  ├─ trees.tsx             # 나무 도감 (종류별 성장 단계)
 │  ├─ gallery.tsx           # 문장 갤러리 피드 (최신/인기/스크랩/내 카드, 책 필터)
-│  ├─ card/new.tsx          # 문구 카드 만들기 (OCR · 템플릿 · 글꼴 · 비율 · 저장/공유/올리기)
+│  ├─ card/new.tsx          # 문구 카드 만들기 (템플릿 · 글꼴 · 비율 · 저장/공유/올리기)
 │  ├─ card/[id].tsx         # 카드 상세 (스포일러 펼치기 · 좋아요 · 스크랩 · 댓글 · 신고)
 │  └─ wrapped.tsx           # 독서 DNA 결산 (스토리 슬라이드 · 페르소나 · 요약 카드 내보내기)
 ├─ config/                  # locale.ts(언어·지역), app.ts(API 주소)
@@ -182,12 +194,14 @@ src/
 ├─ features/
 │  ├─ auth/useAuth.ts       # Supabase 익명/카카오/구글 로그인 훅 (미설정 시 게스트)
 │  ├─ books/                # 검색/상세 쿼리 훅(상세 정보로 서재 기록 자동 보강), 검색 결과 아이템
-│  ├─ forest/               # TreeGraphic(SVG 나무), AnimatedTree(흔들림·성장 애니메이션), ForestGarden(아이소메트릭 숲),
-│  │                        #   species(나무 종류), GrowthCelebration, SpeciesSheet, 날씨, 공유/물 주기(publicForest, demo)
+│  ├─ forest/               # TreeGraphic(SVG 나무), AnimatedTree(흔들림·성장 애니메이션), ForestGarden(아이소메트릭 숲·옮겨 심기),
+│  │                        #   layout(칸 배치·이동·교환), DirtBurst(흙 애니메이션), species(나무 종류 목록), GrowthCelebration,
+│  │                        #   SpeciesSheet, 날씨, 공유/물 주기(publicForest, demo)
+│  ├─ reviews/              # 리뷰 집계(aggregate), Supabase API(api), 리뷰 탭(ReviewsPanel)
 │  ├─ records/              # 독서 캘린더, 통계, 집계 함수
 │  ├─ together/             # 타이머, 한국 지도(Presence·응원), 테마 독서실, 지역(regions), 알림
 │  ├─ sound/                # 백색소음 목록, 믹서 엔진(.web = Web Audio), 볼륨 슬라이더
-│  ├─ gallery/              # 카드 템플릿·글꼴, QuoteCardView, 캡처(.web = html-to-image), OCR(.web = tesseract.js),
+│  ├─ gallery/              # 카드 템플릿·글꼴, QuoteCardView, 캡처(.web = html-to-image),
 │  │                        #   스마트 블러 규칙(blur.ts), Supabase API(api.ts), 번역 스텁(translate.ts)
 │  ├─ wrapped/              # 결산 집계(compute.ts), 페르소나 규칙(personas.ts), 샘플 데이터, 일러스트, 요약 카드
 │  └─ library/              # 기록 시트(4가지 상태), 서재 카드, 진행률 시트, 정렬, 성장 단계, 독서 로그, Supabase 동기화(cloudSync + syncMapping)
@@ -203,9 +217,28 @@ src/
 scripts/test-book-api.ts    # 도서 API 오프라인 테스트
 supabase/migrations/        # DB 스키마 + RLS (0001_init.sql …), setup.sql = 전부 합친 붙여넣기용 파일
 scripts/test-sync-mapping.ts # 서재 ⇄ Supabase 행 변환 오프라인 테스트
-scripts/test-gallery-wrapped.ts # 블러 규칙 · 쪽→% · OCR 정리 · 번역 한도 · 결산 집계/페르소나 테스트 (npm test)
+scripts/test-gallery-wrapped.ts # 블러 규칙 · 쪽→% · 번역 한도 · 결산 집계/페르소나 테스트 (npm test)
+scripts/test-garden-reviews.ts # 숲 칸 배치·이동·교환 · 리뷰 집계 · 쪽수 파싱/대체 테스트 (npm test)
 vercel.json                 # 빌드 설정, /api 제외 SPA 리라이트, 함수 설정
 ```
+
+## ✅ 6차 기능 — 나무 옮겨 심기 · 프리미엄 나무 · 책 리뷰 · 베스트셀러
+
+<p>
+  <img src="docs/screenshots/forest-transplant.png" width="160" alt="나무 옮겨 심기" />
+  <img src="docs/screenshots/tree-premium.png" width="160" alt="프리미엄 나무 도감" />
+  <img src="docs/screenshots/book-reviews.png" width="160" alt="책 리뷰" />
+  <img src="docs/screenshots/search-bestsellers.png" width="160" alt="베스트셀러 추천" />
+  <img src="docs/screenshots/record-sheet-pages.png" width="160" alt="기록 시트 쪽수" />
+  <img src="docs/screenshots/records-layout.png" width="160" alt="기록 탭" />
+</p>
+
+- **나무 옮겨 심기** (홈 숲 → 🪴 옮겨 심기): 나무를 누르고 빈 칸을 누르면 이동, 다른 나무를 누르면 자리 교환, 끌어다 놓아도 돼요. 옮길 수 있는 칸이 점선으로 보이고 흙·삽 애니메이션과 "푹" 소리가 납니다. **➕ 땅 넓히기**로 빈 칸을 늘릴 수 있어요(최대 12×12). 위치는 이 기기(서재 스토어 버전 2)와 `user_books.garden_x/garden_y`에 저장되고 공개 숲 페이지도 같은 배치로 보여요. 위치가 없는 나무는 예전처럼 가운데부터 채워집니다.
+- **프리미엄 나무 7종**: 은행나무(부채꼴 노란 잎 · 은행), 자작나무(흰 줄기 · 꽃차례), 야자수(휜 줄기 · 코코넛), 목련(큰 꽃) 추가. 모든 성장 단계에 고유한 모양이 있고, 도감에 👑 프리미엄 배지가 붙어요. 종류 목록은 `features/forest/species.ts`의 데이터 하나로 관리합니다.
+- **책 리뷰** (책 상세 → 책 소개 | 리뷰 탭): 평균 · 개수 · 별점 분포, 닉네임 · 별점 · 날짜 · 내용 목록, 더보기 메뉴(내 리뷰는 수정/삭제, 남의 리뷰는 신고), 반 별점 + 500자. 기록 시트의 별점·한줄평은 마이의 **한줄평 공개 범위**(기본 전체 공개)에 따라 자동으로 리뷰에 올라가요. Supabase가 없으면 내 기록만 보여줍니다.
+- **검색**: ISBN 탭과 바코드 버튼을 없애고 입력창 하나로 통일(ISBN을 넣으면 알아서 ISBN 검색). 검색 전 화면에 **베스트셀러 추천** 그리드.
+- **쪽수**: 전체 쪽수 입력칸을 없애고 서버에서 자동으로 채웁니다(위 "쪽수 자동 채우기" 참고).
+- **그 밖에**: 사진 글자 인식(OCR)과 tesseract.js · expo-image-picker 제거, 홈·마이의 갤러리 버튼 가운데 정렬, 기록 탭의 독서 DNA 배너를 캘린더 아래로, 진동 설정 제거(앱에서는 항상 켜짐, 설정 스토어 버전 1).
 
 ## ✅ 4차 기능 — 문장 카드 · 갤러리 · 스마트 블러
 
@@ -220,7 +253,6 @@ vercel.json                 # 빌드 설정, /api 제외 SPA 리라이트, 함�
 
 - **문구 카드 메이커** (`app/card/new.tsx`)
   - 서재에서 책 고르기(없으면 책 검색으로 이동), 문장 직접 입력(500자).
-  - **사진에서 글자 읽기(OCR)**: 웹은 [tesseract.js](https://github.com/naptha/tesseract.js) 5(kor+eng)를 **누를 때만** CDN에서 불러오고 진행률(도구 → 한국어 사전 → 인식 %)을 보여줍니다. 결과는 항상 고칠 수 있어요. 앱(iOS/Android)은 ML Kit/Vision 네이티브 모듈이 필요해서 **개발 빌드가 생기면** 붙일 예정이에요(지금은 안내 문구만 보여요, `features/gallery/ocr.ts`).
   - 꾸미기: 템플릿 6종(종이 · 숲 · 밤하늘 · 수채화 무료, 벚꽃 · 바다 프리미엄🔒), 글꼴 6종(송명체 · 나눔손글씨 펜 · 주아체 무료, 개구체 · 연성체 · 도현체 프리미엄🔒), 글자 크기 S/M/L, 정렬, 책 제목·저자 표시, 작은 "🌳 독서의숲" 워터마크. 비율 **9:16 · 1:1 · 4:5**.
   - **이미지 저장/공유**: 웹은 html-to-image로 1080px PNG를 만들고 글꼴을 base64로 넣어서 굽습니다. 공유는 Web Share(파일) → 안 되면 다운로드. 앱은 react-native-view-shot + expo-sharing / expo-media-library(사진첩 저장).
   - 글꼴은 모두 [Google Fonts](https://fonts.google.com/)의 SIL Open Font License(OFL) 글꼴이고, 처음 고를 때만 불러옵니다.
@@ -241,7 +273,7 @@ vercel.json                 # 빌드 설정, /api 제외 SPA 리라이트, 함�
   <img src="docs/screenshots/wrapped-share.png" width="160" alt="공유용 요약 카드" />
 </p>
 
-- **어디서**: 기록 탭 맨 위 배너(이번 달 결산 · 올해 결산 · 체험용 샘플 리포트), 숲(홈)에는 **매달 25일 이후와 12월**에만 배너가 나타나요.
+- **어디서**: 기록 탭 캘린더 아래 배너(이번 달 결산 · 올해 결산 · 체험용 샘플 리포트), 숲(홈)에는 **매달 25일 이후와 12월**에만 배너가 나타나요.
 - **스토리 슬라이드** (`app/wrapped.tsx`): 화면을 누르거나 옆으로 밀어 넘기는 전체 화면 슬라이드, 상단 진행 막대, 숫자가 올라가는 애니메이션. 완독 권수 · 넘긴 페이지 · 집중 시간 · **"올해 당신의 숲에는 42그루의 나무가 심어졌어요"** · 가장 길게 이어 읽은 날 · 가장 많이 읽은 시간 · 가장 많이 들은 소리/독서실 · 가장 많이 읽은 분야(정보가 있을 때만) · 별점 1위 책 · 만든 문구 카드 수.
 - **소리 기록**: 타이머가 끝날 때 재생 중이던 백색소음과 독서실을 기록합니다(`timerStore.history`, 책이 연결되면 `reading_logs.sounds/room`도 저장).
 - **페르소나 8종** (`features/wrapped/personas.ts`): 심야의 사색가 · 새벽의 산책자 · 완독 마라토너 · 몰입의 잠수부 · 문장 수집가 · 꾸준한 정원사 · 햇살 아래 산책자 · 새싹 탐험가. 규칙을 순서대로 확인하고(연간은 기준을 크게 잡음), 각각 색과 SVG 일러스트가 있어요. 예: "새벽 2시에 빗소리를 들으며 읽는 '심야의 사색가'".
@@ -288,7 +320,7 @@ vercel.json                 # 빌드 설정, /api 제외 SPA 리라이트, 함�
 - **하단 탭 5개 (재구성)**: 숲 · 서재 · **기록**(새로 추가: 캘린더·통계) · 타이머 · 마이. 갤러리는 탭에서 빠지고 **마이 → 문장 갤러리 카드**로 들어갑니다(아직 "곧 만나요").
 - **나무 성장 그래픽** (react-native-svg, 웹·앱 공통): 씨앗(0%) → 새싹(10%) → 묘목(35%) → 어린 나무(60%) → 큰 나무(85%) → 완독 시 **열매 나무**(열매/꽃). 은은한 흔들림 애니메이션, 단계가 오르면 **"나무가 자랐어요!"** 성장 애니메이션 + 효과음 + 진동. 서재·홈의 이모지 단계 아이콘도 작은 나무 그림으로 교체.
 - **나만의 독서 숲** (홈): 아이소메트릭(2.5D) 잔디 타일 정원. 읽는 중/완독 = 나무, 중단 = 그루터기, 읽고 싶은 책 = 씨앗 화분. 책이 늘면 정원이 넓어지고(3×3 → 4×4 → …) 옆으로 밀어서 볼 수 있어요. 나무를 누르면 표지·제목·진행률 말풍선 → 책 상세로 이동.
-- **나무 종류**: 무료 3종(둥근나무·소나무·사과나무, 책마다 자동 배정 + 말풍선의 **나무 바꾸기**), 프리미엄 3종(벚나무·바오밥나무·단풍나무)과 **숲 날씨(비·눈)** 는 잠금 표시(`entitlements` 모듈, 마이 → 프리미엄 미리보기(개발용) 스위치로 테스트). **나무 도감**(`/trees`)에서 종류별 성장 단계를 볼 수 있어요.
+- **나무 종류**: 무료 3종(둥근나무·소나무·사과나무, 책마다 자동 배정 + 말풍선의 **나무 바꾸기**), 프리미엄 7종(벚나무·바오밥나무·단풍나무 + 6차의 은행나무·자작나무·야자수·목련)과 **숲 날씨(비·눈)** 는 잠금 표시(`entitlements` 모듈, 마이 → 프리미엄 미리보기(개발용) 스위치로 테스트). **나무 도감**(`/trees`)에서 종류별 성장 단계를 볼 수 있어요.
 - **독서 캘린더**: 월별 달력, 기록이 있는 날엔 책 표지 썸네일(+n), 전체 보기/완독 보기, 이전/다음 달, 날짜를 누르면 그날 읽은 책 목록.
 - **통계**: 읽는 중·완독·기록 수, 이번 달 독서한 날 링, 월별 독서량(권수/페이지 전환, 연도 선택).
 - **독서 로그**: 책 추가·진행률 업데이트·완독 때마다 `(날짜, 책, 읽은 쪽수)` 기록이 자동 저장됩니다. 기존 서재 데이터는 업데이트 시 시작일/완독일 기준으로 로그가 자동 생성됩니다(스토어 버전 1 마이그레이션).
@@ -299,11 +331,11 @@ vercel.json                 # 빌드 설정, /api 제외 SPA 리라이트, 함�
 ## ✅ 1차 기능
 
 - **하단 탭 5개**: 숲, 서재, 타이머(디자인된 "곧 만나요" 카드), 마이(프로필·닉네임·요금제 배지·프리미엄 카드·설정)
-- **국내 도서 검색**: 제목/저자/출판사 · ISBN, 표지·제목·저자·출판사·출간일 표시, 이미 담은 책은 상태 배지
+- **국내 도서 검색**: 제목/저자/출판사(ISBN을 넣어도 됨), 표지·제목·저자·출판사·출간일 표시, 이미 담은 책은 상태 배지
 - **책 상세**: 큰 표지, 책 소개, 저자/옮긴이, 출판사, 출간일, 쪽수, ISBN, 정가, 분류, 서점 링크
 - **기록 바텀시트** (상태별 입력 항목)
   - 읽은 책: 시작/종료일 · 별점 · 한줄평(500자)
-  - 읽고 있는 책: 시작일 · 전체 쪽수(책 정보에 없으면 직접 입력) · 현재 진행(쪽 ↔ % 전환) · 성장 단계 미리보기
+  - 읽고 있는 책: 시작일 · 현재 진행(쪽 ↔ % 전환, 옆에 "전체 N쪽", 쪽수를 모르면 직접 입력 링크) · 성장 단계 미리보기
   - 읽고 싶은 책: 기대지수(하트) · 기대평
   - 중단한 책: 시작/중단일 · 별점 · 한줄평
 - **서재**: 상태별 탭 + 개수, 정렬(최신 저장순/오래된 저장순/최근 수정순/제목순/평점순), 진행률 바(% · 현재/전체 쪽), 수정·삭제, 진행률 빠른 업데이트(100% 도달 시 자동 완독 처리)
@@ -317,8 +349,9 @@ vercel.json                 # 빌드 설정, /api 제외 SPA 리라이트, 함�
 | **1차** | 기반 + 기본 독서기록 ✅ |
 | **2차** | 독서 숲 — 성장 그래픽, 아이소메트릭 숲, 캘린더/통계, 물주기 ✅ (백엔드 Firebase → Supabase 전환) |
 | **3차** | 뽀모도로 · 백색소음 · 실시간 한국 지도(Presence) · 조용한 응원 · 테마 독서실 ✅ (세계 지도/3D 지구본은 `MAP_SCOPE=GLOBAL` 자리만 준비) |
-| **4차** | 문장 카드(OCR) · 갤러리(댓글·스크랩·좋아요·신고) · 스마트 블러 ✅ (번역은 `TRANSLATION_ENABLED` 플래그·하루 10회 한도만 준비) |
+| **4차** | 문장 카드 · 갤러리(댓글·스크랩·좋아요·신고) · 스마트 블러 ✅ (번역은 `TRANSLATION_ENABLED` 플래그·하루 10회 한도만 준비) |
 | **5차** | 독서 DNA 결산(월간·연간, 페르소나, 공유 카드) ✅ · 인앱 결제(RevenueCat)/광고(AdMob) · 출시 ⏳ |
+| **6차** | 나무 옮겨 심기 · 프리미엄 나무 7종 · 책 리뷰 · 베스트셀러 추천 · 쪽수 자동 채우기 ✅ |
 
 ## ☁️ 배포 (Vercel)
 

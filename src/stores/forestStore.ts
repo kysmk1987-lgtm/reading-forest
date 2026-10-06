@@ -19,6 +19,9 @@ interface ForestState {
   /** Local/demo watering counters keyed by forest id. */
   waterings: Record<string, LocalWatering>;
   setWeather: (weather: Weather) => void;
+  /** Extra rows/columns of empty land the reader added (땅 넓히기). */
+  gardenExtra: number;
+  expandGarden: () => void;
   /** Records a local watering; returns false if this forest was already watered on `day`. */
   waterLocal: (forestId: string, day: string) => boolean;
 }
@@ -32,6 +35,8 @@ export const useForestStore = create<ForestState>()(
       weather: 'clear',
       waterings: {},
       setWeather: (weather) => set({ weather }),
+      gardenExtra: 0,
+      expandGarden: () => set((s) => ({ gardenExtra: Math.min(6, s.gardenExtra + 1) })),
       waterLocal: (forestId, day) => {
         const current = get().waterings[forestId] ?? { count: 0 };
         if (current.lastDay === day) return false;

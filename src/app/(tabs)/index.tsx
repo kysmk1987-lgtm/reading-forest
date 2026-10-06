@@ -38,6 +38,10 @@ export default function HomeScreen() {
   const weather = can('premiumTrees') ? storedWeather : 'clear';
   const [speciesFor, setSpeciesFor] = useState<string | null>(null);
   const [shareOpen, setShareOpen] = useState(false);
+  const [editing, setEditing] = useState(false);
+  const gardenExtra = useForestStore((s) => s.gardenExtra);
+  const expandGarden = useForestStore((s) => s.expandGarden);
+  const plantTrees = useLibraryStore((s) => s.plantTrees);
 
   const trees = useMemo(() => Object.values(entriesMap).map((e) => treeFromEntry(e, isPremium)), [entriesMap, isPremium]);
 
@@ -74,13 +78,38 @@ export default function HomeScreen() {
               {trees.length ? t('forest.summary', { trees: trees.length, grown: summary.grown }) : t('home.forestEmptyShort')}
             </AppText>
           </View>
-          <Button size="sm" variant="soft" label={`🔗 ${t('forest.share')}`} onPress={() => setShareOpen(true)} />
+          {editing ? (
+            <>
+              <Button
+                size="sm"
+                variant="soft"
+                label={`➕ ${t('forest.expand')}`}
+                disabled={gardenExtra >= 6}
+                onPress={() => {
+                  tapFeedback();
+                  expandGarden();
+                  showToast(t('forest.expanded'));
+                }}
+              />
+              <Button size="sm" label={t('forest.transplantDone')} onPress={() => setEditing(false)} />
+            </>
+          ) : (
+            <>
+              {trees.length > 0 ? (
+                <Button size="sm" variant="soft" label={`🪴 ${t('forest.transplant')}`} onPress={() => setEditing(true)} />
+              ) : null}
+              <Button size="sm" variant="soft" label={`🔗 ${t('forest.share')}`} onPress={() => setShareOpen(true)} />
+            </>
+          )}
         </View>
 
         <ForestGarden
           trees={trees}
           weather={weather}
           emptyLabel={t('forest.emptySign')}
+          editing={editing}
+          extra={gardenExtra}
+          onTransplant={plantTrees}
           onOpenBook={(tree) => router.push({ pathname: '/book/[id]', params: { id: tree.bookId } })}
           onChangeSpecies={(tree) => setSpeciesFor(tree.id)}
         />
@@ -109,7 +138,7 @@ export default function HomeScreen() {
           })}
         </View>
         <AppText variant="tiny" muted center style={styles.hint}>
-          {t('forest.tapHint')}
+          {editing ? t('forest.transplantHint') : t('forest.tapHint')}
         </AppText>
         <Pressable accessibilityRole="link" onPress={() => router.push('/trees')} style={styles.guideLink}>
           <AppText variant="caption" color={palette.skyDeep}>
@@ -252,5 +281,5 @@ const styles = StyleSheet.create({
   galleryCard: { gap: spacing.sm },
   galleryHead: { flexDirection: 'row', alignItems: 'center', gap: spacing.md },
   galleryEmoji: { fontSize: 30, lineHeight: 38 },
-  galleryButtons: { flexDirection: 'row', gap: spacing.xs },
+  galleryButtons: { flexDirection: 'row', justifyContent: 'center', flexWrap: 'wrap', gap: spacing.xs },
 });

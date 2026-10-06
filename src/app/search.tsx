@@ -2,15 +2,17 @@ import Ionicons from '@expo/vector-icons/Ionicons';
 import { router } from 'expo-router';
 import { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { ActivityIndicator, StyleSheet, View } from 'react-native';
+import { ActivityIndicator, Pressable, StyleSheet, View } from 'react-native';
 
-import { AppText, Button, EmptyState, IconButton, Input, Screen, SegmentedControl } from '@/components/ui';
+import { BookCover } from '@/components/BookCover';
+import { AppText, Button, EmptyState, IconButton, Input, Screen } from '@/components/ui';
 import { BookListItem } from '@/features/books/BookListItem';
-import { useBookSearch } from '@/features/books/hooks';
-import { BookApiError, type SearchMode } from '@/lib/api/books';
-import { notify } from '@/lib/confirm';
+import { useBestsellers, useBookSearch } from '@/features/books/hooks';
+import { BookApiError, looksLikeIsbn } from '@/lib/api/books';
+import { tapFeedback } from '@/lib/feedback';
 import { useLibraryStore } from '@/stores/libraryStore';
-import { colors, spacing } from '@/theme';
+import { colors, palette, radius, spacing } from '@/theme';
+import type { Book } from '@/types';
 
 function useDebounced<T>(value: T, delay = 400) {
   const [debounced, setDebounced] = useState(value);
@@ -21,12 +23,14 @@ function useDebounced<T>(value: T, delay = 400) {
   return debounced;
 }
 
+const openBook = (book: Book) => router.push({ pathname: '/book/[id]', params: { id: book.id } });
+
 export default function SearchScreen() {
   const { t } = useTranslation();
-  const [mode, setMode] = useState<SearchMode>('keyword');
   const [text, setText] = useState('');
   const query = useDebounced(text);
-  const search = useBookSearch(query, mode);
+  // One box for 제목·저자·출판사; an ISBN typed there is looked up by ISBN without a separate tab.
+  const search = useBookSearch(query, looksLikeIsbn(query) ? 'isbn' : 'keyword');
   const entries = useLibraryStore((s) => s.entries);
   const statusByBook = new Map(Object.values(entries).map((e) => [e.book.id, e.status] as const));
 
@@ -36,32 +40,10 @@ export default function SearchScreen() {
     <Screen
       title={t('search.title')}
       headerLeft={<IconButton name="chevron-back" accessibilityLabel={t('common.back')} onPress={back} />}>
-      <View style={styles.modeRow}>
-        <SegmentedControl
-          value={mode}
-          onChange={(m) => {
-            setMode(m);
-            setText('');
-          }}
-          options={[
-            { value: 'keyword', label: t('search.modeKeyword') },
-            { value: 'isbn', label: t('search.modeIsbn') },
-          ]}
-        />
-        <Button
-          size="sm"
-          variant="soft"
-          label={t('search.scan')}
-          icon={<Ionicons name="barcode-outline" size={18} color={colors.text} />}
-          onPress={() => notify(t('search.scanSoon'))}
-        />
-      </View>
-
       <Input
         value={text}
         onChangeText={setText}
-        placeholder={mode === 'isbn' ? t('search.isbnPlaceholder') : t('search.placeholder')}
-        keyboardType={mode === 'isbn' ? 'number-pad' : 'default'}
+        placeholder={t('search.placeholder')}
         returnKeyType="search"
         autoFocus
         autoCorrect={false}
@@ -74,7 +56,10 @@ export default function SearchScreen() {
       />
 
       {!query.trim() ? (
-        <EmptyState emoji="🔍" title={t('search.idle')} body={t('search.idleHint')} />
+        <>
+          <EmptyState emoji="🔍" title={t('search.idle')} body={t('search.idleHint')} />
+          <Bestsellers />
+        </>
       ) : search.isLoading ? (
         <ActivityIndicator color={colors.primaryDeep} size="large" style={styles.loading} />
       ) : search.isError ? (
@@ -90,18 +75,60 @@ export default function SearchScreen() {
           ) : null}
           {search.data.books.map((book) => {
             const status = statusByBook.get(book.id);
-            return (
-              <BookListItem
-                key={book.id}
-                book={book}
-                badge={status ? t(`status.${status}`) : undefined}
-                onPress={() => router.push({ pathname: '/book/[id]', params: { id: book.id } })}
-              />
-            );
+            return <BookListItem key={book.id} book={book} badge={status ? t(`status.${status}`) : undefined} onPress={() => openBook(book)} />;
           })}
         </View>
       ) : null}
     </Screen>
+  );
+}
+
+/** 베스트셀러 추천 below the empty state; hidden when the list can't be loaded. */
+function Bestsellers() {
+  const { t } = useTranslation();
+  const best = useBestsellers();
+  if (best.isError) return null;
+  return (
+    <View style={styles.best} testID="bestsellers">
+      <View style={styles.bestHead}>
+        <AppText variant="subtitle">📚 {best.data?.source === 'data4library' ? t('search.bestLibrary') : t('search.bestTitle')}</AppText>
+        <AppText variant="tiny" muted>
+          {best.data?.source === 'data4library' ? t('search.bestLibraryHint') : t('search.bestHint')}
+        </AppText>
+      </View>
+      {best.isLoading || !best.data ? (
+        <ActivityIndicator color={colors.primaryDeep} style={styles.loading} />
+      ) : (
+        <View style={styles.grid}>
+          {best.data.books.slice(0, 21).map((book, i) => (
+            <Pressable
+              key={book.id}
+              accessibilityRole="button"
+              accessibilityLabel={book.title}
+              onPress={() => {
+                tapFeedback();
+                openBook(book);
+              }}
+              style={({ pressed }) => [styles.cell, pressed && styles.pressed]}>
+              <View>
+                <BookCover uri={book.coverUrl} title={book.title} width={92} />
+                <View style={styles.rank}>
+                  <AppText variant="tiny" color={colors.textOnPrimary}>
+                    {i + 1}
+                  </AppText>
+                </View>
+              </View>
+              <AppText variant="tiny" numberOfLines={2} center style={styles.cellTitle}>
+                {book.title}
+              </AppText>
+              <AppText variant="tiny" muted numberOfLines={1} center>
+                {book.authors[0] ?? ''}
+              </AppText>
+            </Pressable>
+          ))}
+        </View>
+      )}
+    </View>
   );
 }
 
@@ -124,7 +151,33 @@ function SearchError({ error, onRetry }: { error: unknown; onRetry: () => void }
 }
 
 const styles = StyleSheet.create({
-  modeRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', gap: spacing.sm },
-  loading: { marginTop: spacing.xxl },
+  loading: { marginTop: spacing.xl },
   list: { gap: spacing.sm },
+  best: {
+    gap: spacing.md,
+    padding: spacing.md,
+    borderRadius: radius.xl,
+    backgroundColor: palette.yellowSoft,
+    borderWidth: 2,
+    borderColor: 'rgba(255,255,255,0.8)',
+  },
+  bestHead: { gap: 2 },
+  grid: { flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'space-between', rowGap: spacing.md },
+  cell: { width: '31%', alignItems: 'center', gap: 4 },
+  cellTitle: { minHeight: 32 },
+  pressed: { opacity: 0.7 },
+  rank: {
+    position: 'absolute',
+    top: -6,
+    left: -6,
+    minWidth: 22,
+    height: 22,
+    paddingHorizontal: 4,
+    borderRadius: 11,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: palette.pinkDeep,
+    borderWidth: 2,
+    borderColor: colors.surface,
+  },
 });

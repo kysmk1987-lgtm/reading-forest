@@ -4,17 +4,18 @@ import { useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Pressable, StyleSheet, Switch, View } from 'react-native';
 
-import { AppText, Button, Card, Chip, Input, Screen, SegmentedControl } from '@/components/ui';
+import { AppText, Button, Card, Chip, Input, Screen, SegmentedControl, showToast } from '@/components/ui';
 import { ENABLED_LOCALES, isLanguagePickerEnabled, LOCALE_LABELS } from '@/config/locale';
 import { useAuthActions, type AuthErrorCode } from '@/features/auth/useAuth';
 import { STATUS_META } from '@/features/library/statusMeta';
 import { REGIONS, regionName } from '@/features/together/regions';
-import { notify } from '@/lib/confirm';
+import { hideMyReviews, isReviewsConfigured } from '@/features/reviews/api';
+import { confirmAsync, notify } from '@/lib/confirm';
 import { useEntitlements, useEntitlementsStore } from '@/lib/entitlements';
 import { tapFeedback } from '@/lib/feedback';
 import { useLibraryStore } from '@/stores/libraryStore';
 import { useProfileStore } from '@/stores/profileStore';
-import { useSettingsStore, type AppLanguage } from '@/stores/settingsStore';
+import { useSettingsStore, type AppLanguage, type ReviewVisibility } from '@/stores/settingsStore';
 import { useTogetherStore } from '@/stores/togetherStore';
 import { colors, palette, radius, spacing } from '@/theme';
 import { READING_STATUSES } from '@/types';
@@ -42,6 +43,16 @@ export default function MyScreen() {
 
   const accountLabel = t(`my.account.${profile.authMode}`);
   const signedIn = profile.authMode !== 'guest' && profile.authMode !== 'anonymous';
+
+  const changeVisibility = async (next: ReviewVisibility) => {
+    tapFeedback();
+    if (next === settings.reviewVisibility) return;
+    settings.setReviewVisibility(next);
+    if (next === 'private' && isReviewsConfigured()) {
+      const ok = await confirmAsync(t('my.reviewVisibility'), t('my.reviewHideExisting'), t('my.reviewHideConfirm'), t('common.cancel'));
+      if (ok) showToast((await hideMyReviews()) ? t('my.reviewHidden') : t('reviews.failed'));
+    }
+  };
 
   return (
     <Screen title={t('my.title')}>
@@ -184,7 +195,7 @@ export default function MyScreen() {
             </AppText>
           </View>
         </Pressable>
-        <View style={styles.row}>
+        <View style={[styles.row, styles.center]}>
           <Button size="sm" variant="soft" label={`🔖 ${t('my.myScraps')}`} onPress={() => router.push({ pathname: '/gallery', params: { tab: 'scraps' } })} />
           <Button size="sm" variant="soft" label={`🗂️ ${t('my.myCards')}`} onPress={() => router.push({ pathname: '/gallery', params: { tab: 'mine' } })} />
           <Button size="sm" label={`✍️ ${t('gallery.make')}`} onPress={() => router.push('/card/new')} />
@@ -209,7 +220,22 @@ export default function MyScreen() {
           </View>
         ) : null}
         <SettingRow label={t('my.sound')} value={settings.soundEnabled} onChange={settings.setSoundEnabled} />
-        <SettingRow label={t('my.haptics')} value={settings.hapticsEnabled} onChange={settings.setHapticsEnabled} />
+        <View style={styles.visibility}>
+          <View style={styles.settingRow}>
+            <AppText style={styles.flex}>{t('my.reviewVisibility')}</AppText>
+            <SegmentedControl<ReviewVisibility>
+              value={settings.reviewVisibility}
+              onChange={changeVisibility}
+              options={[
+                { value: 'public', label: `🌏 ${t('my.reviewPublic')}` },
+                { value: 'private', label: `🔒 ${t('my.reviewPrivate')}` },
+              ]}
+            />
+          </View>
+          <AppText variant="tiny" muted>
+            {settings.reviewVisibility === 'public' ? t('my.reviewPublicHint') : t('my.reviewPrivateHint')}
+          </AppText>
+        </View>
         <SettingRow label={t('my.blurUnowned')} value={settings.blurUnownedQuotes} onChange={settings.setBlurUnownedQuotes} />
         <AppText variant="tiny" muted>
           {t('my.blurUnownedHint')}
@@ -294,6 +320,8 @@ const styles = StyleSheet.create({
   },
   planBadgePremium: { backgroundColor: palette.yellow },
   row: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm },
+  center: { justifyContent: 'center' },
+  visibility: { gap: 2, paddingVertical: spacing.xs },
   section: { gap: spacing.sm },
   statRow: { flexDirection: 'row', gap: spacing.sm },
   stat: { flex: 1, alignItems: 'center', paddingVertical: spacing.md, borderRadius: radius.lg, gap: 2 },

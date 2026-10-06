@@ -12,6 +12,7 @@ import {
   planUpload,
   rowToEntry,
   rowToLog,
+  withoutGardenColumns,
   withoutSessionColumns,
   type BookRow,
   type ReadingLogRow,
@@ -38,7 +39,11 @@ async function upsertBooks(sb: SupabaseClient, books: Book[]) {
 async function upsertEntries(sb: SupabaseClient, userId: string, entries: LibraryEntry[]) {
   if (!entries.length) return;
   await upsertBooks(sb, entries.map((e) => e.book));
-  const { error } = await sb.from('user_books').upsert(entries.map((e) => entryToRow(e, userId)), { onConflict: 'user_id,id' });
+  const rows = entries.map((e) => entryToRow(e, userId));
+  const write = (r: UserBookRow[]) => sb.from('user_books').upsert(r, { onConflict: 'user_id,id' });
+  let { error } = await write(rows);
+  // PGRST204: column not found — migration 0004 (garden_x/garden_y) is not applied yet.
+  if (error?.code === 'PGRST204') ({ error } = await write(rows.map(withoutGardenColumns)));
   if (error) throw error;
 }
 

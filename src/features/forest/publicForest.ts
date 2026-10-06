@@ -31,6 +31,9 @@ interface PublicTreeRow {
   current_percent: number | null;
   total_pages: number | null;
   tree_species: string | null;
+  /** Present once migration 0004 is applied. */
+  garden_x?: number | null;
+  garden_y?: number | null;
   created_at: string;
 }
 
@@ -68,6 +71,8 @@ export function treeFromPublicRow(row: PublicTreeRow, ownerIsPremium: boolean): 
     start_date: null,
     end_date: null,
     tree_species: row.tree_species,
+    garden_x: row.garden_x,
+    garden_y: row.garden_y,
     created_at: row.created_at,
     updated_at: row.created_at,
   } satisfies UserBookRow);

@@ -1,13 +1,16 @@
+import { useQueryClient } from '@tanstack/react-query';
 import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Pressable, ScrollView, StyleSheet, View } from 'react-native';
 
 import { AppText, Button, DateField, Input, ProgressBar, SegmentedControl, Sheet, StarRating } from '@/components/ui';
 import { GrowthBadge } from '@/components/GrowthBadge';
+import { publishFromRecord } from '@/features/reviews/api';
 import { todayISO } from '@/lib/date';
 import { successFeedback, tapFeedback } from '@/lib/feedback';
 import { useLibraryStore } from '@/stores/libraryStore';
-import { colors, radius, spacing } from '@/theme';
+import { useSettingsStore } from '@/stores/settingsStore';
+import { colors, palette, radius, spacing } from '@/theme';
 import {
   READING_STATUSES,
   REVIEW_MAX_LENGTH,
@@ -19,6 +22,7 @@ import {
 } from '@/types';
 
 import { progressPercent } from './growth';
+import { defaultProgressUnit, pagesDisplay } from './pages';
 import { STATUS_META } from './statusMeta';
 
 interface FormState {
@@ -45,7 +49,7 @@ function initialForm(bookPageCount?: number, entry?: LibraryEntry, status?: Read
     endDate: entry?.endDate ?? today,
     rating: entry?.rating ?? 0,
     review: entry?.review ?? '',
-    progressUnit: entry?.progressUnit ?? 'page',
+    progressUnit: defaultProgressUnit(pageCount, entry?.progressUnit),
     currentPage: entry?.currentPage ? String(entry.currentPage) : '',
     currentPercent: entry?.currentPercent ? String(entry.currentPercent) : '',
     expectation: entry?.expectation ?? 0,
@@ -99,15 +103,20 @@ export function RecordSheet({ visible, onClose, book, entry, onSaved }: RecordSh
   const { t } = useTranslation();
   const addEntry = useLibraryStore((s) => s.addEntry);
   const updateEntry = useLibraryStore((s) => s.updateEntry);
+  const queryClient = useQueryClient();
+  const visibility = useSettingsStore((s) => s.reviewVisibility);
   const [form, setForm] = useState<FormState>(() => initialForm(book.pageCount, entry));
-  /** Kakao has no page count (and Aladin is shutting down), so the reader can fill it in. */
-  const missingPageCount = !book.pageCount;
-  const totalPages = toNumber(form.totalPages) || book.pageCount;
+  /** Page counts come from the book APIs; the input only appears when none of them knows the book. */
+  const [manualPages, setManualPages] = useState(false);
+  const { total: totalPages, fallback: pagesUnknown } = pagesDisplay(book.pageCount, form.totalPages);
 
   const [openedFor, setOpenedFor] = useState<{ visible: boolean; entry?: LibraryEntry }>({ visible, entry });
   if (openedFor.visible !== visible || openedFor.entry !== entry) {
     setOpenedFor({ visible, entry });
-    if (visible) setForm(initialForm(book.pageCount, entry));
+    if (visible) {
+      setForm(initialForm(book.pageCount, entry));
+      setManualPages(false);
+    }
   }
 
   const set = <K extends keyof FormState>(key: K, value: FormState[K]) => setForm((f) => ({ ...f, [key]: value }));
@@ -133,26 +142,28 @@ export function RecordSheet({ visible, onClose, book, entry, onSaved }: RecordSh
       saved = addEntry(draft);
     }
     successFeedback();
+    if (saved.book.isbn13) {
+      publishFromRecord(saved).finally(() => queryClient.invalidateQueries({ queryKey: ['reviews', saved.book.isbn13] }));
+    }
     onSaved?.(saved);
     onClose();
   };
 
-  const totalPagesField = (
-    <View style={styles.section}>
-      <Input
-        label={t('record.totalPagesLabel')}
-        keyboardType="number-pad"
-        value={form.totalPages}
-        onChangeText={(v) => set('totalPages', v.replace(/[^0-9]/g, '').slice(0, 5))}
-        placeholder={t('record.totalPagesPlaceholder')}
-        right={<AppText variant="caption" muted>{t('record.unitPage')}</AppText>}
-      />
-      {missingPageCount ? (
-        <AppText variant="tiny" muted>
-          {t('record.totalPagesHint')}
-        </AppText>
-      ) : null}
-    </View>
+  const pagesFallback = !pagesUnknown ? null : manualPages ? (
+    <Input
+      label={t('record.totalPagesLabel')}
+      keyboardType="number-pad"
+      value={form.totalPages}
+      onChangeText={(v) => set('totalPages', v.replace(/[^0-9]/g, '').slice(0, 5))}
+      placeholder={t('record.totalPagesPlaceholder')}
+      right={<AppText variant="caption" muted>{t('record.unitPage')}</AppText>}
+    />
+  ) : (
+    <Pressable accessibilityRole="button" onPress={() => setManualPages(true)} style={styles.pagesLink}>
+      <AppText variant="caption" muted>
+        {t('record.pagesUnknown')} · <AppText variant="caption" color={colors.primaryDeep}>{t('record.pagesManual')}</AppText>
+      </AppText>
+    </Pressable>
   );
 
   const previewPercent = progressPercent({
@@ -215,9 +226,8 @@ export function RecordSheet({ visible, onClose, book, entry, onSaved }: RecordSh
           </View>
           <View style={[styles.row, styles.between]}>
             <AppText variant="subtitle">{t('record.rating')}</AppText>
-            <StarRating value={form.rating}             onChange={(v) => set('rating', v)} />
+            <StarRating value={form.rating} allowHalf onChange={(v) => set('rating', v)} />
           </View>
-          {missingPageCount ? totalPagesField : null}
           <Input
             label={t('record.review')}
             showCounter
@@ -227,6 +237,15 @@ export function RecordSheet({ visible, onClose, book, entry, onSaved }: RecordSh
             onChangeText={(v) => set('review', v)}
             placeholder={t('record.reviewPlaceholder')}
           />
+          {book.isbn13 ? (
+            <View style={[styles.visibility, visibility === 'public' ? styles.visibilityPublic : styles.visibilityPrivate]}>
+              <AppText variant="tiny">
+                {visibility === 'public'
+                  ? `🌏 ${t('record.reviewPublic')}${form.rating ? '' : ` · ${t('record.reviewNeedsRating')}`}`
+                  : `🔒 ${t('record.reviewPrivate')}`}
+              </AppText>
+            </View>
+          ) : null}
         </>
       ) : null}
 
@@ -239,19 +258,26 @@ export function RecordSheet({ visible, onClose, book, entry, onSaved }: RecordSh
               <View style={styles.flex} />
             </View>
           </View>
-          {totalPagesField}
           <View style={styles.section}>
             <View style={[styles.row, styles.between]}>
               <AppText variant="subtitle">{t('record.progress')}</AppText>
-              <SegmentedControl
-                value={form.progressUnit}
-                onChange={(v) => set('progressUnit', v)}
-                options={[
-                  { value: 'page', label: t('record.unitPage') },
-                  { value: 'percent', label: t('record.unitPercent') },
-                ]}
-              />
+              <View style={[styles.row, styles.center, styles.tight]}>
+                {totalPages ? (
+                  <AppText variant="caption" muted testID="total-pages">
+                    {t('record.totalPages', { count: totalPages })}
+                  </AppText>
+                ) : null}
+                <SegmentedControl
+                  value={form.progressUnit}
+                  onChange={(v) => set('progressUnit', v)}
+                  options={[
+                    { value: 'page', label: t('record.unitPage') },
+                    { value: 'percent', label: t('record.unitPercent') },
+                  ]}
+                />
+              </View>
             </View>
+            {pagesFallback}
             {form.progressUnit === 'page' ? (
               <Input
                 keyboardType="number-pad"
@@ -321,5 +347,10 @@ const styles = StyleSheet.create({
   row: { flexDirection: 'row', gap: spacing.md },
   between: { justifyContent: 'space-between', alignItems: 'center' },
   center: { alignItems: 'center' },
+  tight: { gap: spacing.sm },
   flex: { flex: 1 },
+  pagesLink: { alignSelf: 'flex-start', paddingVertical: 2 },
+  visibility: { alignSelf: 'flex-start', paddingHorizontal: spacing.sm, paddingVertical: 3, borderRadius: radius.pill },
+  visibilityPublic: { backgroundColor: palette.skySoft },
+  visibilityPrivate: { backgroundColor: palette.stoneSoft },
 });

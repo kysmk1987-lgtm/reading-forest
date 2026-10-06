@@ -14,7 +14,6 @@ export default function RecordsScreen() {
   const [section, setSection] = useState<Section>('calendar');
   return (
     <Screen title={t('records.title')}>
-      <WrappedBanner />
       <View style={styles.switcher}>
         <SegmentedControl<Section>
           value={section}
@@ -26,6 +25,7 @@ export default function RecordsScreen() {
         />
       </View>
       {section === 'calendar' ? <ReadingCalendar /> : <ReadingStats />}
+      <WrappedBanner />
     </Screen>
   );
 }

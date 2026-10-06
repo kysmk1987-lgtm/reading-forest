@@ -2,6 +2,7 @@
 //   tap.wav   — soft "pop" for taps
 //   grow.wav  — rising chime when a tree reaches a new stage
 //   water.wav — bubbly droplet for watering a friend's forest
+//   dig.wav   — shovel crunch when a tree is transplanted
 // Run: node scripts/generate-tap-sound.mjs
 import { mkdirSync, writeFileSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
@@ -44,6 +45,23 @@ function tone(durationSec, f0, f1, gain, decay) {
   return out;
 }
 
+/** Deterministic noise burst (soil being scooped), low-passed and decaying. */
+function crunch(durationSec, gain, decay, seed) {
+  const n = Math.floor(sampleRate * durationSec);
+  const out = new Float32Array(n);
+  let s = seed;
+  let prev = 0;
+  for (let i = 0; i < n; i++) {
+    s = (s * 1103515245 + 12345) & 0x7fffffff;
+    const white = (s / 0x7fffffff) * 2 - 1;
+    prev = prev * 0.82 + white * 0.18;
+    const t = i / n;
+    const attack = Math.min(1, i / (sampleRate * 0.006));
+    out[i] = prev * attack * Math.exp(-t * decay) * gain * 3;
+  }
+  return out;
+}
+
 function mix(parts) {
   const length = Math.max(...parts.map(({ at, samples }) => Math.floor(at * sampleRate) + samples.length));
   const out = new Float32Array(length);
@@ -69,6 +87,13 @@ const sounds = {
   'water.wav': mix([
     { at: 0, samples: tone(0.09, 600, 1400, 0.3, 5) },
     { at: 0.11, samples: tone(0.08, 800, 1700, 0.22, 6) },
+  ]),
+  // Shovel into soil: a soft crunch, a low thud, then a little "pop" as the tree settles.
+  'dig.wav': mix([
+    { at: 0, samples: crunch(0.16, 0.35, 5, 7) },
+    { at: 0.02, samples: tone(0.12, 180, 90, 0.35, 6) },
+    { at: 0.2, samples: crunch(0.1, 0.22, 6, 11) },
+    { at: 0.3, samples: tone(0.08, 700, 1100, 0.18, 6) },
   ]),
 };
 

@@ -14,6 +14,9 @@ export interface ForestTree {
   percent: number;
   species: TreeSpeciesId;
   createdAt: number;
+  /** Saved tile (옮겨 심기); unset trees are placed automatically. */
+  gardenX?: number;
+  gardenY?: number;
 }
 
 export function treeFromEntry(entry: LibraryEntry, isPremium: boolean): ForestTree {
@@ -26,6 +29,8 @@ export function treeFromEntry(entry: LibraryEntry, isPremium: boolean): ForestTr
     percent: progressPercent(entry),
     species: speciesOf(entry, isPremium),
     createdAt: entry.createdAt,
+    gardenX: entry.gardenX,
+    gardenY: entry.gardenY,
   };
 }
 

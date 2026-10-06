@@ -4,12 +4,11 @@ import { ScrollView, StyleSheet, View } from 'react-native';
 
 import { AppText, Card, IconButton, Screen } from '@/components/ui';
 import { AnimatedTree } from '@/features/forest/AnimatedTree';
-import { TREE_SPECIES } from '@/features/forest/species';
+import { SPECIES_IDS, TREE_SPECIES } from '@/features/forest/species';
 import { TreeGraphic } from '@/features/forest/TreeGraphic';
 import { GROWTH_STAGES } from '@/features/library/growth';
 import { useEntitlements } from '@/lib/entitlements';
 import { colors, palette, radius, spacing } from '@/theme';
-import { TREE_SPECIES_IDS } from '@/types';
 
 /** 나무 도감: every species at every growth stage, plus the special looks. */
 export default function TreeGuideScreen() {
@@ -53,7 +52,7 @@ export default function TreeGuideScreen() {
         </View>
       </Card>
 
-      {TREE_SPECIES_IDS.map((id) => {
+      {SPECIES_IDS.map((id) => {
         const locked = TREE_SPECIES[id].premium && !can('premiumTrees');
         return (
           <Card key={id} style={styles.speciesCard}>

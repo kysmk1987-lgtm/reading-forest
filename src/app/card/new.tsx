@@ -1,14 +1,12 @@
-import * as ImagePicker from 'expo-image-picker';
 import { router, useLocalSearchParams } from 'expo-router';
 import { useMemo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Pressable, StyleSheet, Switch, View, useWindowDimensions } from 'react-native';
 
-import { AppText, Button, Card, Chip, IconButton, Input, ProgressBar, Screen, SegmentedControl, showToast } from '@/components/ui';
+import { AppText, Button, Card, Chip, IconButton, Input, Screen, SegmentedControl, showToast } from '@/components/ui';
 import { cardProgress } from '@/features/gallery/blur';
 import { captureView, makeBlurThumb, saveImage, shareImage } from '@/features/gallery/capture';
 import { CARD_FONTS, fontById, useCardFont } from '@/features/gallery/fonts';
-import { OCR_SUPPORTED, recognizeText, type OcrStage } from '@/features/gallery/ocr';
 import { DEFAULT_DESIGN, QuoteCardView, type QuoteCardDesign } from '@/features/gallery/QuoteCardView';
 import { aspectRatio, CARD_ASPECTS, CARD_TEMPLATES, type CardAlign, type CardAspect, type CardTextSize } from '@/features/gallery/templates';
 import { isMissingSchemaError, uploadCard } from '@/features/gallery/api';
@@ -40,7 +38,6 @@ export default function CardMakerScreen() {
   const entry: LibraryEntry | undefined = entryId ? entries[entryId] : undefined;
   const [quote, setQuote] = useState('');
   const [design, setDesign] = useState<QuoteCardDesign>(DEFAULT_DESIGN);
-  const [ocr, setOcr] = useState<{ progress: number; stage: OcrStage } | null>(null);
   const [unit, setUnit] = useState<'page' | 'percent'>(() => (entry?.progressUnit === 'percent' || !entry?.book.pageCount ? 'percent' : 'page'));
   const [progressText, setProgressText] = useState(() => initialProgress(entry, unit));
   const [busy, setBusy] = useState<null | 'save' | 'share' | 'upload'>(null);
@@ -68,24 +65,6 @@ export default function CardMakerScreen() {
       return;
     }
     setDesign((d) => ({ ...d, [key]: value }));
-  };
-
-  const runOcr = async () => {
-    const res = await ImagePicker.launchImageLibraryAsync({ mediaTypes: ['images'], quality: 1 });
-    if (res.canceled || !res.assets?.[0]) return;
-    setOcr({ progress: 0, stage: 'loading' });
-    try {
-      const text = await recognizeText(res.assets[0].uri, (p, stage) => setOcr({ progress: p, stage }));
-      if (text) {
-        setQuote(text.slice(0, 500));
-        showToast(t('cards.ocrDone'));
-      } else showToast(t('cards.ocrEmpty'));
-    } catch (err) {
-      console.warn('[ocr]', err);
-      showToast(t('cards.ocrFailed'));
-    } finally {
-      setOcr(null);
-    }
   };
 
   const capture = async () => {
@@ -197,25 +176,6 @@ export default function CardMakerScreen() {
           maxLength={500}
           showCounter
         />
-        {OCR_SUPPORTED ? (
-          ocr ? (
-            <View style={styles.ocr}>
-              <AppText variant="caption">{t(`cards.ocrStage.${ocr.stage}`, { percent: Math.round(ocr.progress * 100) })}</AppText>
-              <ProgressBar percent={ocr.progress * 100} color={palette.sky} />
-            </View>
-          ) : (
-            <View style={styles.row}>
-              <Button size="sm" variant="sky" label={`📷 ${t('cards.ocr')}`} onPress={runOcr} />
-              <AppText variant="tiny" muted style={styles.flex}>
-                {t('cards.ocrHint')}
-              </AppText>
-            </View>
-          )
-        ) : (
-          <AppText variant="tiny" muted>
-            {t('cards.ocrNative')}
-          </AppText>
-        )}
       </Card>
 
       <View style={styles.previewWrap}>
@@ -378,7 +338,6 @@ const styles = StyleSheet.create({
   wrap: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.xs },
   row: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
   flex: { flex: 1 },
-  ocr: { gap: spacing.xs },
   previewWrap: { alignItems: 'center', gap: spacing.xs },
   previewShadow: {
     borderRadius: 18,

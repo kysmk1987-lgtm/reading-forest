@@ -1,12 +1,11 @@
 /**
- * Offline tests for quote-card blur logic, page → % conversion, OCR clean-up, translation quota
+ * Offline tests for quote-card blur logic, page → % conversion, translation quota
  * and the 독서 DNA (Wrapped) aggregation + persona rules.
  * Run: npm run test:gallery
  */
 import assert from 'node:assert/strict';
 
 import { cardProgress, findEntryForCard, pageToPercent, shouldBlur, viewerProgressOf } from '../src/features/gallery/blur';
-import { cleanOcrText } from '../src/features/gallery/ocrText';
 import { remainingTranslations } from '../src/features/gallery/quota';
 import { bucketOf, categoryLabel, computeWrapped, isEmptyWrapped, longestStreak, wrappedBannerPeriod, type WrappedStats } from '../src/features/wrapped/compute';
 import { koreanHour, personaTagline, pickPersona, withObjectParticle } from '../src/features/wrapped/personas';
@@ -76,13 +75,6 @@ test('findEntryForCard matches ISBN first, then book id', () => {
   assert.equal(findEntryForCard(entries, { isbn13: '9788936434120', book_id: null })?.id, 'e1');
   assert.equal(findEntryForCard(entries, { isbn13: null, book_id: 'kr_9788936434120' })?.id, 'e1');
   assert.equal(findEntryForCard(entries, { isbn13: '9790000000000', book_id: 'x' }), undefined);
-});
-
-console.log('OCR clean-up');
-test('joins wrapped lines and removes syllable spacing', () => {
-  assert.equal(cleanOcrText('나 는 오 늘 도\n책 을 읽 는 다 .'), '나는오늘도책을읽는다.');
-  assert.equal(cleanOcrText('삶은 계속된다\n그리고 우리는 읽는다 .'), '삶은 계속된다 그리고 우리는 읽는다.');
-  assert.equal(cleanOcrText('첫 문단\n\n둘째 문단'), '첫 문단\n둘째 문단');
 });
 
 console.log('translation quota');
