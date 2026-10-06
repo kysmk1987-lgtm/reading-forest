@@ -5,7 +5,7 @@ import assert from 'node:assert/strict';
 import { GET as lookup } from '../api/books/[isbn]';
 import { GET as search } from '../api/books/search';
 import { splitIsbns } from '../api/_lib/isbn';
-import { parseAladinAuthors } from '../api/_lib/providers';
+import { kakaoCover, parseAladinAuthors } from '../api/_lib/providers';
 
 const ISBN13 = '9791187444725';
 
@@ -67,6 +67,13 @@ async function main() {
     authors: ['홍길동', '김철수'],
     translators: ['이영희'],
   });
+  assert.equal(
+    kakaoCover(
+      'https://search1.kakaocdn.net/thumb/R120x174.q85/?fname=http%3A%2F%2Ft1.daumcdn.net%2Flbook%2Fimage%2F5956574%3Ftimestamp%3D20260918121258',
+    ),
+    'https://t1.daumcdn.net/lbook/image/5956574?timestamp=20260918121258',
+  );
+  assert.equal(kakaoCover(kakaoDoc.thumbnail), kakaoDoc.thumbnail, 'unknown fname keeps the thumbnail');
 
   // No keys → Korean NO_KEYS error, no upstream calls.
   delete process.env.KAKAO_REST_API_KEY;

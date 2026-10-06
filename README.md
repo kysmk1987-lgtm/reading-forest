@@ -39,32 +39,34 @@ npx expo start --web    # 바로 웹으로 실행 (http://localhost:8081)
 
 ## 🔑 도서 검색 API 키 설정 (필수)
 
-키는 **서버 전용 환경 변수**(이름에 `EXPO_PUBLIC_`이 없음)라 앱 번들에 노출되지 않습니다. 하나 이상 등록하면 되며, **카카오 → 알라딘 → 네이버** 순서로 사용합니다. 키가 하나도 없으면 검색 화면에 "책 검색 준비가 아직 끝나지 않았어요" 안내가 표시됩니다.
+키는 **서버 전용 환경 변수**(이름에 `EXPO_PUBLIC_`이 없음)라 앱 번들에 노출되지 않습니다. 하나 이상 등록하면 되며, **카카오 → (알라딘) → 네이버** 순서로 사용합니다. 키가 하나도 없으면 검색 화면에 "책 검색 준비가 아직 끝나지 않았어요" 안내가 표시됩니다.
 
-| 변수 | 용도 | 발급 방법 |
-| --- | --- | --- |
-| `KAKAO_REST_API_KEY` | **기본 검색** (제목·저자·출판사·ISBN, 표지, 소개, 정가, 출간일, 옮긴이) | [Kakao Developers](https://developers.kakao.com) 로그인 → 내 애플리케이션 → 애플리케이션 추가 → 앱 키의 **REST API 키** 복사 |
-| `ALADIN_TTB_KEY` | **상세 보강** (큰 표지, 쪽수, 분류, 상세 소개) — 카카오는 쪽수를 주지 않아서 알라딘으로 보완 | [알라딘 TTB 키 발급](https://www.aladin.co.kr/ttb/wblog_manage.aspx) (알라딘 로그인 → 블로그/사이트 주소에 배포 주소 입력 → TTB 키 발급) |
-| `NAVER_CLIENT_ID` / `NAVER_CLIENT_SECRET` | 선택: 예비 검색 | [Naver Developers](https://developers.naver.com/apps) → 애플리케이션 등록 → 사용 API에서 **검색** 선택 → Client ID / Secret 복사 |
+| 변수 | 상태 | 용도 | 발급 방법 |
+| --- | --- | --- | --- |
+| `KAKAO_REST_API_KEY` | ✅ **등록됨** (Production·Preview·Development) | **기본 검색** (제목·저자·출판사·ISBN, 표지, 소개, 정가, 출간일, 옮긴이). **쪽수는 제공하지 않음** | [Kakao Developers](https://developers.kakao.com) 로그인 → 내 애플리케이션 → 애플리케이션 추가 → 앱 키의 **REST API 키** 복사. ⚠️ 키 설정의 **허용 IP(클라이언트 IP) 제한은 켜지 마세요** — Vercel 서버 IP는 고정이 아닙니다 |
+| `ALADIN_TTB_KEY` | ⛔ **종료 예정** | 상세 보강 (큰 표지, 쪽수, 분류) | 알라딘 OpenAPI는 신규 키 발급이 2026-09-04에 끝났고 서비스가 **2026-10-30 종료**됩니다. 기존 키가 있다면 그때까지만 동작하며, 없어도 앱은 정상 동작합니다 |
+| `NAVER_CLIENT_ID` / `NAVER_CLIENT_SECRET` | 선택 | 예비 검색 | [Naver Developers](https://developers.naver.com/apps) → 애플리케이션 등록 → 사용 API에서 **검색** 선택 → Client ID / Secret 복사 |
 
-Vercel에 등록 (값은 실행 후 프롬프트에 붙여넣기):
+**쪽수가 없는 책**: 카카오는 쪽수를 주지 않으므로, 서재에 담을 때(읽고 있는 책) 또는 진행률을 업데이트할 때 **전체 쪽수를 직접 입력**할 수 있습니다. 입력한 쪽수로 진행률(%)과 성장 단계가 계산됩니다. 쪽수 자동 보강이 필요하면 추후 **국립중앙도서관 ISBN 서지정보 API**(무료, 쪽수 포함)를 연동하는 방안이 있습니다.
+
+Vercel에 등록 (`--value`로 넘기면 프롬프트 없이 등록되고 줄바꿈도 섞이지 않습니다):
 
 ```powershell
-npx vercel env add KAKAO_REST_API_KEY production
-npx vercel env add ALADIN_TTB_KEY production
-npx vercel env add NAVER_CLIENT_ID production       # 선택
-npx vercel env add NAVER_CLIENT_SECRET production   # 선택
-npx vercel --prod --yes                             # 재배포해야 적용됩니다
+npx vercel env add KAKAO_REST_API_KEY production --value "<키>" --sensitive --yes
+npx vercel env add KAKAO_REST_API_KEY preview --value "<키>" --sensitive --yes
+npx vercel env add NAVER_CLIENT_ID production --value "<ID>" --sensitive --yes          # 선택
+npx vercel env add NAVER_CLIENT_SECRET production --value "<SECRET>" --sensitive --yes  # 선택
+npx vercel --prod --yes                                                                  # 재배포해야 적용됩니다
 ```
 
-> 미리보기 배포에서도 쓰려면 `production` 대신 `preview`로 한 번 더 추가하세요. 대시보드(Project → Settings → Environment Variables)에서 등록해도 됩니다.
+> 대시보드(Project → Settings → Environment Variables)에서 등록해도 됩니다. 로컬 `vercel dev`용 키는 `.env.local`(git 제외)에 둡니다.
 
 ### API 엔드포인트
 
 | 경로 | 설명 |
 | --- | --- |
 | `GET /api/books/search?q=검색어&field=keyword\|title\|author\|publisher\|isbn` | 국내 도서 검색. 응답 `{ books, source }`, 10분 캐시 |
-| `GET /api/books/{ISBN}` | 상세 정보 (알라딘 + 카카오 + 네이버 병합: 큰 표지, 소개, 쪽수, 저자/옮긴이, 정가, 분류, 서점 링크), 1일 캐시 |
+| `GET /api/books/{ISBN}` | 상세 정보 (카카오 + 네이버 병합, 알라딘 키가 있으면 쪽수·분류 보강: 표지, 소개, 저자/옮긴이, 정가, 서점 링크), 1일 캐시 |
 
 오류 응답은 `{ error: { code, message } }` 형식이며 `code`는 `NO_KEYS`, `BAD_REQUEST`, `NOT_FOUND`, `RATE_LIMITED`, `UPSTREAM` 중 하나입니다. 앱은 코드별로 한국어 안내를 보여줍니다.
 
@@ -146,7 +148,7 @@ vercel.json                 # 빌드 설정, /api 제외 SPA 리라이트, 함�
 - **책 상세**: 큰 표지, 책 소개, 저자/옮긴이, 출판사, 출간일, 쪽수, ISBN, 정가, 분류, 서점 링크
 - **기록 바텀시트** (상태별 입력 항목)
   - 읽은 책: 시작/종료일 · 별점 · 한줄평(500자)
-  - 읽고 있는 책: 시작일 · 현재 진행(쪽 ↔ % 전환) · 성장 단계 미리보기
+  - 읽고 있는 책: 시작일 · 전체 쪽수(책 정보에 없으면 직접 입력) · 현재 진행(쪽 ↔ % 전환) · 성장 단계 미리보기
   - 읽고 싶은 책: 기대지수(하트) · 기대평
   - 중단한 책: 시작/중단일 · 별점 · 한줄평
 - **서재**: 상태별 탭 + 개수, 정렬(최신 저장순/오래된 저장순/최근 수정순/제목순/평점순), 진행률 바(% · 현재/전체 쪽), 수정·삭제, 진행률 빠른 업데이트(100% 도달 시 자동 완독 처리)

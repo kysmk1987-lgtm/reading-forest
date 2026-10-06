@@ -49,6 +49,21 @@ interface KakaoDoc {
   thumbnail: string;
 }
 
+/**
+ * Kakao thumbnails are 120×174. The original Daum image (~460px wide) is in the `fname` param;
+ * it is served over http in the param but also works over https (needed to avoid mixed content).
+ */
+export function kakaoCover(thumbnail: string): string | undefined {
+  if (!thumbnail) return undefined;
+  try {
+    const original = new URL(thumbnail).searchParams.get('fname');
+    if (original && /^https?:\/\/t\d\.daumcdn\.net\//.test(original)) return original.replace(/^http:/, 'https:');
+  } catch {
+    // fall through to the thumbnail
+  }
+  return thumbnail;
+}
+
 function mapKakao(doc: KakaoDoc): Book | null {
   return withId({
     source: 'kakao',
@@ -58,7 +73,7 @@ function mapKakao(doc: KakaoDoc): Book | null {
     publisher: doc.publisher || undefined,
     publishedDate: doc.datetime ? doc.datetime.slice(0, 10) : undefined,
     ...splitIsbns(doc.isbn),
-    coverUrl: doc.thumbnail || undefined,
+    coverUrl: kakaoCover(doc.thumbnail),
     description: cleanText(doc.contents),
     price: doc.price > 0 ? doc.price : undefined,
     link: doc.url || undefined,

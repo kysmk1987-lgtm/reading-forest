@@ -1,4 +1,4 @@
-import { useEffect, useRef } from 'react';
+import { useEffect, useState } from 'react';
 import { Animated, Easing, Platform, StyleSheet, View } from 'react-native';
 
 import { AppText } from '@/components/ui';
@@ -6,7 +6,7 @@ import { palette } from '@/theme';
 
 /** Placeholder for the full forest view: a small garden mound with a swaying sprout. */
 export function SproutIllustration({ emoji = '🌱', size = 200 }: { emoji?: string; size?: number }) {
-  const sway = useRef(new Animated.Value(0)).current;
+  const [sway] = useState(() => new Animated.Value(0));
 
   useEffect(() => {
     const useNativeDriver = Platform.OS !== 'web';

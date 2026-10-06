@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Pressable, ScrollView, StyleSheet, View } from 'react-native';
 
@@ -28,15 +28,18 @@ interface FormState {
   rating: number;
   review: string;
   progressUnit: ProgressUnit;
+  totalPages: string;
   currentPage: string;
   currentPercent: string;
   expectation: number;
   expectationNote: string;
 }
 
-function initialForm(entry?: LibraryEntry, status?: ReadingStatus): FormState {
+function initialForm(bookPageCount?: number, entry?: LibraryEntry, status?: ReadingStatus): FormState {
   const today = todayISO();
+  const pageCount = entry?.book.pageCount ?? bookPageCount;
   return {
+    totalPages: pageCount ? String(pageCount) : '',
     status: status ?? entry?.status ?? 'read',
     startDate: entry?.startDate ?? today,
     endDate: entry?.endDate ?? today,
@@ -57,7 +60,8 @@ function toNumber(text: string, max?: number) {
 }
 
 /** Only the fields relevant to the chosen status are stored. */
-function buildDraft(book: Book, f: FormState): LibraryEntryDraft {
+function buildDraft(source: Book, f: FormState): LibraryEntryDraft {
+  const book: Book = { ...source, pageCount: toNumber(f.totalPages) || source.pageCount };
   const base = { book, status: f.status };
   switch (f.status) {
     case 'read':
@@ -95,11 +99,16 @@ export function RecordSheet({ visible, onClose, book, entry, onSaved }: RecordSh
   const { t } = useTranslation();
   const addEntry = useLibraryStore((s) => s.addEntry);
   const updateEntry = useLibraryStore((s) => s.updateEntry);
-  const [form, setForm] = useState<FormState>(() => initialForm(entry));
+  const [form, setForm] = useState<FormState>(() => initialForm(book.pageCount, entry));
+  /** Kakao has no page count (and Aladin is shutting down), so the reader can fill it in. */
+  const missingPageCount = !book.pageCount;
+  const totalPages = toNumber(form.totalPages) || book.pageCount;
 
-  useEffect(() => {
-    if (visible) setForm(initialForm(entry));
-  }, [visible, entry]);
+  const [openedFor, setOpenedFor] = useState<{ visible: boolean; entry?: LibraryEntry }>({ visible, entry });
+  if (openedFor.visible !== visible || openedFor.entry !== entry) {
+    setOpenedFor({ visible, entry });
+    if (visible) setForm(initialForm(book.pageCount, entry));
+  }
 
   const set = <K extends keyof FormState>(key: K, value: FormState[K]) => setForm((f) => ({ ...f, [key]: value }));
 
@@ -127,6 +136,24 @@ export function RecordSheet({ visible, onClose, book, entry, onSaved }: RecordSh
     onSaved?.(saved);
     onClose();
   };
+
+  const totalPagesField = (
+    <View style={styles.section}>
+      <Input
+        label={t('record.totalPagesLabel')}
+        keyboardType="number-pad"
+        value={form.totalPages}
+        onChangeText={(v) => set('totalPages', v.replace(/[^0-9]/g, '').slice(0, 5))}
+        placeholder={t('record.totalPagesPlaceholder')}
+        right={<AppText variant="caption" muted>{t('record.unitPage')}</AppText>}
+      />
+      {missingPageCount ? (
+        <AppText variant="tiny" muted>
+          {t('record.totalPagesHint')}
+        </AppText>
+      ) : null}
+    </View>
+  );
 
   const previewPercent = progressPercent({
     ...buildDraft(book, form),
@@ -188,8 +215,9 @@ export function RecordSheet({ visible, onClose, book, entry, onSaved }: RecordSh
           </View>
           <View style={[styles.row, styles.between]}>
             <AppText variant="subtitle">{t('record.rating')}</AppText>
-            <StarRating value={form.rating} onChange={(v) => set('rating', v)} />
+            <StarRating value={form.rating}             onChange={(v) => set('rating', v)} />
           </View>
+          {missingPageCount ? totalPagesField : null}
           <Input
             label={t('record.review')}
             showCounter
@@ -211,6 +239,7 @@ export function RecordSheet({ visible, onClose, book, entry, onSaved }: RecordSh
               <View style={styles.flex} />
             </View>
           </View>
+          {totalPagesField}
           <View style={styles.section}>
             <View style={[styles.row, styles.between]}>
               <AppText variant="subtitle">{t('record.progress')}</AppText>
@@ -231,7 +260,7 @@ export function RecordSheet({ visible, onClose, book, entry, onSaved }: RecordSh
                 placeholder={t('record.currentPage')}
                 right={
                   <AppText variant="caption" muted>
-                    {book.pageCount ? t('record.totalPages', { count: book.pageCount }) : t('record.unitPage')}
+                    {totalPages ? t('record.totalPages', { count: totalPages }) : t('record.unitPage')}
                   </AppText>
                 }
               />
