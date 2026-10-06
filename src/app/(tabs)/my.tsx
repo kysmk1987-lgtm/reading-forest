@@ -4,16 +4,18 @@ import { useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Pressable, StyleSheet, Switch, View } from 'react-native';
 
-import { AppText, Button, Card, Input, Screen, SegmentedControl } from '@/components/ui';
+import { AppText, Button, Card, Chip, Input, Screen, SegmentedControl } from '@/components/ui';
 import { ENABLED_LOCALES, isLanguagePickerEnabled, LOCALE_LABELS } from '@/config/locale';
 import { useAuthActions, type AuthErrorCode } from '@/features/auth/useAuth';
 import { STATUS_META } from '@/features/library/statusMeta';
+import { REGIONS, regionName } from '@/features/together/regions';
 import { notify } from '@/lib/confirm';
 import { useEntitlements, useEntitlementsStore } from '@/lib/entitlements';
 import { tapFeedback } from '@/lib/feedback';
 import { useLibraryStore } from '@/stores/libraryStore';
 import { useProfileStore } from '@/stores/profileStore';
 import { useSettingsStore, type AppLanguage } from '@/stores/settingsStore';
+import { useTogetherStore } from '@/stores/togetherStore';
 import { colors, palette, radius, spacing } from '@/theme';
 import { READING_STATUSES } from '@/types';
 
@@ -186,6 +188,8 @@ export default function MyScreen() {
         </Card>
       </Pressable>
 
+      <RegionSetting />
+
       <Card style={styles.section}>
         <AppText variant="subtitle">{t('my.settings')}</AppText>
         {isLanguagePickerEnabled ? (
@@ -217,6 +221,31 @@ export default function MyScreen() {
         </View>
       </Card>
     </Screen>
+  );
+}
+
+function RegionSetting() {
+  const { t } = useTranslation();
+  const detected = useTogetherStore((s) => s.detectedRegion);
+  const override = useTogetherStore((s) => s.regionOverride);
+  const setOverride = useTogetherStore((s) => s.setRegionOverride);
+  return (
+    <Card style={styles.section}>
+      <AppText variant="subtitle">📍 {t('my.region')}</AppText>
+      <AppText variant="caption" muted>
+        {t('my.regionHint')}
+      </AppText>
+      <View style={styles.row}>
+        <Chip
+          label={detected ? t('my.regionAuto', { region: regionName(detected) }) : t('my.regionAutoUnknown')}
+          selected={!override}
+          onPress={() => setOverride(null)}
+        />
+        {REGIONS.map((r) => (
+          <Chip key={r.key} label={r.name} selected={override === r.key} onPress={() => setOverride(r.key)} />
+        ))}
+      </View>
+    </Card>
   );
 }
 

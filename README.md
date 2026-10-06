@@ -85,6 +85,7 @@ npx vercel --prod --yes                                                         
 | `EXPO_PUBLIC_ENABLED_LOCALES` | `ko` | 활성 언어 목록(쉼표 구분) |
 | `EXPO_PUBLIC_BOOK_REGION` | `KR` | 도서 검색 지역 |
 | `EXPO_PUBLIC_API_BASE_URL` | (자동) | `/api` 서버 주소 |
+| `EXPO_PUBLIC_MAP_SCOPE` | `KR` | 함께 읽기 지도 범위 (`KR` 한국 지도, `GLOBAL` 세계 지도 자리 표시) |
 | `EXPO_PUBLIC_SUPABASE_URL` | 없음 | Supabase 프로젝트 주소 (`https://<project-ref>.supabase.co`) |
 | `EXPO_PUBLIC_SUPABASE_ANON_KEY` | 없음 | Supabase anon(publishable) 키. RLS로 보호되므로 앱에 들어가도 안전. 두 값이 없으면 **로컬 게스트 모드**(이 기기에만 저장, 데모 숲) |
 
@@ -157,7 +158,8 @@ api/                        # Vercel 서버리스 함수 (도서 검색 프록�
 src/
 ├─ app/                     # Expo Router 라우트 (파일 = 화면)
 │  ├─ _layout.tsx           # 폰트·QueryClient·Auth 리스너·Stack, 웹에서는 모바일 폭(480px)으로 중앙 정렬
-│  ├─ (tabs)/               # 하단 탭: 숲(index) · 서재 · 기록(records: 캘린더·통계) · 타이머 · 마이
+│  ├─ (tabs)/               # 하단 탭: 숲(index) · 서재 · 기록(records: 캘린더·통계) · 함께 읽기(together) · 마이
+│  ├─ room/[id].tsx         # 테마 독서실 (일러스트 + 같은 방 독서가 + 미니 타이머)
 │  ├─ search.tsx            # 책 검색 (제목/저자, ISBN, 바코드는 추후)
 │  ├─ book/[id].tsx         # 책 상세 + 서재 담기
 │  ├─ forest/[userId].tsx   # 공개 숲 페이지 (읽기 전용 + 물 주기), /forest/demo = 데모 숲
@@ -175,6 +177,8 @@ src/
 │  ├─ forest/               # TreeGraphic(SVG 나무), AnimatedTree(흔들림·성장 애니메이션), ForestGarden(아이소메트릭 숲),
 │  │                        #   species(나무 종류), GrowthCelebration, SpeciesSheet, 날씨, 공유/물 주기(publicForest, demo)
 │  ├─ records/              # 독서 캘린더, 통계, 집계 함수
+│  ├─ together/             # 타이머, 한국 지도(Presence·응원), 테마 독서실, 지역(regions), 알림
+│  ├─ sound/                # 백색소음 목록, 믹서 엔진(.web = Web Audio), 볼륨 슬라이더
 │  └─ library/              # 기록 시트(4가지 상태), 서재 카드, 진행률 시트, 정렬, 성장 단계, 독서 로그, Supabase 동기화(cloudSync + syncMapping)
 ├─ lib/
 │  ├─ api/books.ts          # 지역별 검색 클라이언트 (KR → /api 프록시)
@@ -190,6 +194,41 @@ supabase/migrations/        # DB 스키마 + RLS (0001_init.sql …), setup.sql 
 scripts/test-sync-mapping.ts # 서재 ⇄ Supabase 행 변환 오프라인 테스트
 vercel.json                 # 빌드 설정, /api 제외 SPA 리라이트, 함수 설정
 ```
+
+## ✅ 3차 기능 — 함께 읽기
+
+<p>
+  <img src="docs/screenshots/timer.png" width="160" alt="뽀모도로 타이머" />
+  <img src="docs/screenshots/mixer.png" width="160" alt="백색소음 믹서" />
+  <img src="docs/screenshots/korea-map.png" width="160" alt="실시간 한국 지도" />
+  <img src="docs/screenshots/cheer.png" width="160" alt="조용한 응원" />
+  <img src="docs/screenshots/room.png" width="160" alt="테마 독서실" />
+</p>
+
+**탭 구조 (5개 유지)**: 숲 · 서재 · 기록 · **함께 읽기**(기존 타이머 탭) · 마이. 함께 읽기 안에 ⏱️ 타이머 / 🎧 소리 / 🗺️ 지도 / 🏠 독서실 4개 구역이 있고, 독서실에 들어가면 전용 화면(`/room/{id}`)이 열립니다. 내 지역 설정은 **마이 → 📍 내 지역**에 있습니다.
+
+- **뽀모도로 타이머** (`features/together/TimerPanel`, `stores/timerStore`, `TimerWatcher`)
+  - 프리셋 25/5 · 50/10 · 15/3 + 직접 설정, 큰 원형 타이머, 시작/일시정지/처음으로, 집중 ↔ 휴식 전환.
+  - 끝나는 시각(timestamp) 기준으로 계산하므로 백그라운드·새로고침에도 정확합니다.
+  - 끝나면 차임 + 진동, 앱은 **로컬 알림**(expo-notifications, 시작할 때 예약), 웹은 선택 시 브라우저 알림.
+  - 읽고 있는 책을 연결하면 집중 시간이 `reading_logs`(kind `focus`, `minutes`)에 기록되고 캘린더에 남습니다. 끝나면 **읽은 쪽수 업데이트**를 바로 권합니다.
+- **백색소음 믹서** (`features/sound/`)
+  - 소리마다 볼륨 슬라이더, 여러 소리 동시 재생. 무료: 빗소리 · 도서관 · 장작 / 프리미엄(잠금): 카페 · 파도 · 숲속 새소리 · 심해 · 우주정거장 · 기차.
+  - 웹은 Web Audio API(끊김 없는 루프, 첫 탭에서 시작), 앱은 expo-audio 루프 재생.
+- **실시간 한국 지도** (`features/together/KoreaLiveMap`, `PresenceBridge`, `presence.ts`)
+  - 17개 시·도 SVG 지도(제주·울릉·독도 포함), 지역마다 나무 아이콘 + 인원, 인원이 많을수록 진한 초록. 상단에 "지금 전국 ○○명이 함께 읽고 있어요".
+  - **Supabase Realtime Presence**, 채널 `reading-now`. 타이머가 돌고 있거나 독서실에 있을 때만 집계됩니다. 보내는 정보는 시·도, 상태, 방(+독서실 안에서는 닉네임·나무·책 제목)뿐이에요.
+  - 지역은 `/api/geo`(Vercel의 `x-vercel-ip-country-region` 헤더 → 시·도, 위치 권한 불필요)로 자동 감지하고, **마이 → 내 지역**에서 바꿀 수 있습니다.
+  - Supabase가 연결되지 않으면 예시 인원을 보여주는 **체험 모드**로 표시됩니다.
+  - `EXPO_PUBLIC_MAP_SCOPE=KR | GLOBAL` (`src/config/locale.ts`). GLOBAL은 세계 지도(3D 지구본) 자리 표시 화면입니다.
+- **조용한 응원**: 지도의 지역을 누르고 이모지를 보내면(Realtime Broadcast) 그 지역 독서가들에게 "서울에서 응원이 도착했어요 ☕" 말풍선이 떠오릅니다. 10초에 한 번 제한.
+- **테마 독서실** (`features/together/rooms.ts`, `RoomScene`, `app/room/[id].tsx`)
+  - 비 오는 날 오래된 서점 · 심야 도서관(무료), 고요한 찻집 · 바닷가 다락방(프리미엄 잠금).
+  - 일러스트 배경, 들어가면 그 방의 소리 조합이 자동 재생(입장 탭이 사용자 동작이라 웹에서도 재생됨), 같은 방 사람들이 닉네임 표시와 함께 나무로 서 있고, 미니 타이머가 있습니다.
+
+### 소리 · 지도 출처와 라이선스
+- **소리**: 외부 음원을 쓰지 않았습니다. `scripts/generate-ambient.mjs`(백색소음 9종)와 `scripts/generate-tap-sound.mjs`(탭·성장·물·차임)가 노이즈·사인파·필터로 직접 합성한 WAV(16 kHz, 루프 경계 크로스페이드, 합계 약 3 MB)라서 저작권 제약이 없습니다(프로젝트 자체 제작, CC0처럼 자유롭게 사용 가능).
+- **지도**: [Natural Earth](https://www.naturalearthdata.com/) Admin-1 경계(퍼블릭 도메인)를 `scripts/generate-korea-map.mjs`로 단순화해 `src/features/together/koreaMapData.ts`에 넣었습니다.
 
 ## ✅ 2차 기능 — 독서 숲
 
@@ -224,7 +263,7 @@ vercel.json                 # 빌드 설정, /api 제외 SPA 리라이트, 함�
 | --- | --- |
 | **1차** | 기반 + 기본 독서기록 ✅ |
 | **2차** | 독서 숲 — 성장 그래픽, 아이소메트릭 숲, 캘린더/통계, 물주기 ✅ (백엔드 Firebase → Supabase 전환) |
-| **3차** | 뽀모도로 · 백색소음 · 3D 지구본 · 실시간 접속자 · 조용한 응원 · 테마룸 |
+| **3차** | 뽀모도로 · 백색소음 · 실시간 한국 지도(Presence) · 조용한 응원 · 테마 독서실 ✅ (세계 지도/3D 지구본은 `MAP_SCOPE=GLOBAL` 자리만 준비) |
 | **4차** | 문장 카드(OCR) · 갤러리 · 번역(Functions, 무료 하루 10회) · 스마트 블러 |
 | **5차** | 독서 결산 · 인앱 결제(RevenueCat)/광고(AdMob) · 출시 |
 

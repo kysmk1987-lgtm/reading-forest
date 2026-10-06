@@ -31,3 +31,11 @@ export const LOCALE_LABELS: Record<AppLocale, string> = {
 export type BookRegion = 'KR' | 'GLOBAL';
 
 export const BOOK_REGION: BookRegion = process.env.EXPO_PUBLIC_BOOK_REGION === 'GLOBAL' ? 'GLOBAL' : 'KR';
+
+/**
+ * Live readers map: `KR` = pastel Korea map by 시·도 (launch), `GLOBAL` = world view (future 3D globe;
+ * `GlobalReadersPlaceholder` until implemented). Set `EXPO_PUBLIC_MAP_SCOPE=GLOBAL` to switch.
+ */
+export type MapScope = 'KR' | 'GLOBAL';
+
+export const MAP_SCOPE: MapScope = process.env.EXPO_PUBLIC_MAP_SCOPE === 'GLOBAL' ? 'GLOBAL' : 'KR';

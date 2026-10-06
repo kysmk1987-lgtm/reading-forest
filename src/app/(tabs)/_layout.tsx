@@ -10,7 +10,7 @@ export default function TabsLayout() {
       <Tabs.Screen name="index" options={{ title: t('tabs.home') }} />
       <Tabs.Screen name="library" options={{ title: t('tabs.library') }} />
       <Tabs.Screen name="records" options={{ title: t('tabs.records') }} />
-      <Tabs.Screen name="timer" options={{ title: t('tabs.timer') }} />
+      <Tabs.Screen name="together" options={{ title: t('tabs.together') }} />
       <Tabs.Screen name="my" options={{ title: t('tabs.my') }} />
     </Tabs>
   );

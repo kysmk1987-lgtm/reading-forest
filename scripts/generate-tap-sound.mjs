@@ -60,6 +60,12 @@ const sounds = {
   'grow.wav': mix(
     [1046.5, 1318.5, 1568, 2093].map((f, i) => ({ at: i * 0.08, samples: tone(0.45, f, f, 0.22, 5) })),
   ),
+  // Gentle timer alarm: two soft bell phrases (G5 – C6 – E6).
+  'chime.wav': mix(
+    [0, 1.1].flatMap((start) =>
+      [784, 1046.5, 1318.5].map((f, i) => ({ at: start + i * 0.18, samples: tone(0.9, f, f, 0.2, 4) })),
+    ),
+  ),
   'water.wav': mix([
     { at: 0, samples: tone(0.09, 600, 1400, 0.3, 5) },
     { at: 0.11, samples: tone(0.08, 800, 1700, 0.22, 6) },

@@ -8,14 +8,22 @@ const SOURCES = {
   tap: require('../../assets/sounds/tap.wav'),
   grow: require('../../assets/sounds/grow.wav'),
   water: require('../../assets/sounds/water.wav'),
+  chime: require('../../assets/sounds/chime.wav'),
 };
 type SoundName = keyof typeof SOURCES;
 
 const players: Partial<Record<SoundName, AudioPlayer>> = {};
 let audioUnavailable = false;
 
+/** Browsers reject play() (as an unhandled rejection) until the page has had a user gesture. */
+function webAudioBlocked() {
+  if (Platform.OS !== 'web' || typeof navigator === 'undefined') return false;
+  const activation = (navigator as Navigator & { userActivation?: { hasBeenActive: boolean } }).userActivation;
+  return activation ? !activation.hasBeenActive : false;
+}
+
 function playSound(name: SoundName, volume = 0.5) {
-  if (audioUnavailable) return;
+  if (audioUnavailable || webAudioBlocked()) return;
   try {
     let player = players[name];
     if (!player) {
@@ -60,6 +68,13 @@ export function growFeedback() {
   const { soundEnabled, hapticsEnabled } = useSettingsStore.getState();
   if (hapticsEnabled) notifySuccess();
   if (soundEnabled) playSound('grow', 0.6);
+}
+
+/** Timer finished: the chime plays even when UI sounds are off (it is an alarm). */
+export function alarmFeedback() {
+  const { hapticsEnabled } = useSettingsStore.getState();
+  if (hapticsEnabled) notifySuccess();
+  playSound('chime', 0.8);
 }
 
 /** Watered a forest. */

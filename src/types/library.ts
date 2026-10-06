@@ -33,8 +33,8 @@ export type LibraryEntryDraft = Omit<LibraryEntry, 'id' | 'createdAt' | 'updated
 export const TREE_SPECIES_IDS = ['round', 'pine', 'apple', 'cherry', 'baobab', 'maple'] as const;
 export type TreeSpeciesId = (typeof TREE_SPECIES_IDS)[number];
 
-/** `add`: started/added a book, `progress`: pages read, `complete`: finished the book. */
-export type ReadingLogKind = 'add' | 'progress' | 'complete';
+/** `add`: started/added a book, `progress`: pages read, `complete`: finished the book, `focus`: a timer session. */
+export type ReadingLogKind = 'add' | 'progress' | 'complete' | 'focus';
 
 /** One reading activity on a day; powers the calendar and statistics. */
 export interface ReadingLog {
@@ -46,6 +46,8 @@ export interface ReadingLog {
   kind: ReadingLogKind;
   /** Pages read in this activity (0 when unknown). */
   pagesDelta: number;
+  /** Focused reading minutes (timer sessions). */
+  minutes?: number;
   createdAt: number;
 }
 

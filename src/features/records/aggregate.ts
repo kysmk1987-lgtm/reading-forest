@@ -6,7 +6,7 @@ export interface DayActivity {
   pages: number;
 }
 
-const KIND_PRIORITY: Record<ReadingLogKind, number> = { progress: 0, add: 1, complete: 2 };
+const KIND_PRIORITY: Record<ReadingLogKind, number> = { focus: 0, progress: 1, add: 2, complete: 3 };
 
 /** Activities per day (`YYYY-MM-DD`) for one month, one row per book (the most notable kind wins). */
 export function activitiesByDay(
@@ -55,6 +55,11 @@ export function monthlyTotals(logs: ReadingLog[], year: number): MonthTotals[] {
 export function readingDaysInMonth(logs: ReadingLog[], year: number, month: number): number {
   const prefix = `${year}-${String(month).padStart(2, '0')}-`;
   return new Set(logs.filter((l) => l.date.startsWith(prefix)).map((l) => l.date)).size;
+}
+
+/** Focused (timer) minutes on one day. */
+export function focusMinutesOn(logs: ReadingLog[], day: string) {
+  return logs.reduce((sum, l) => (l.date === day && l.kind === 'focus' ? sum + (l.minutes ?? 0) : sum), 0);
 }
 
 export function daysInMonth(year: number, month: number) {

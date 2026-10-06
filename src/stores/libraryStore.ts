@@ -48,6 +48,8 @@ interface LibraryState {
   addEntry: (draft: LibraryEntryDraft) => LibraryEntry;
   updateEntry: (id: string, patch: Partial<LibraryEntryDraft>) => void;
   removeEntry: (id: string) => void;
+  /** Records a finished focus (timer) session for a book. */
+  addFocusLog: (entryId: string, minutes: number, date: string) => void;
   /** Merge remote entries (last write wins by `updatedAt`) and logs (union by id). */
   mergeRemote: (remote: { entries: LibraryEntry[]; logs: ReadingLog[] }) => void;
 }
@@ -86,6 +88,13 @@ export const useLibraryStore = create<LibraryState>()(
           return { entries: rest, logs: s.logs.filter((l) => l.entryId !== id) };
         });
         emit({ type: 'delete', id });
+      },
+      addFocusLog: (entryId, minutes, date) => {
+        const entry = get().entries[entryId];
+        if (!entry || minutes <= 0) return;
+        const logs = toLogs([{ entryId, bookId: entry.book.id, date, kind: 'focus', pagesDelta: 0, minutes: Math.round(minutes) }]);
+        set((s) => ({ logs: [...s.logs, ...logs] }));
+        emit({ type: 'upsert', entry, logs });
       },
       mergeRemote: (remote) => {
         set((s) => {

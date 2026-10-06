@@ -12,7 +12,7 @@ export const TAB_ICONS: Record<string, string> = {
   index: '🌳',
   library: '📚',
   records: '📅',
-  timer: '⏰',
+  together: '🕯️',
   my: '🌼',
 };
 

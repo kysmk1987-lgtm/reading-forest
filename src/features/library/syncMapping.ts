@@ -48,6 +48,7 @@ export interface ReadingLogRow {
   date: string;
   kind: ReadingLog['kind'];
   pages_delta: number;
+  minutes: number;
   created_at: string;
 }
 
@@ -158,12 +159,13 @@ export function logToRow(log: ReadingLog, userId: string): ReadingLogRow {
     date: log.date,
     kind: log.kind,
     pages_delta: Math.max(0, Math.round(log.pagesDelta || 0)),
+    minutes: Math.max(0, Math.min(600, Math.round(log.minutes ?? 0))),
     created_at: toIso(log.createdAt),
   };
 }
 
 export function rowToLog(row: ReadingLogRow): ReadingLog {
-  return {
+  const log: ReadingLog = {
     id: row.id,
     entryId: row.user_book_id,
     bookId: row.book_id,
@@ -172,6 +174,8 @@ export function rowToLog(row: ReadingLogRow): ReadingLog {
     pagesDelta: row.pages_delta,
     createdAt: toMs(row.created_at),
   };
+  if (row.minutes) log.minutes = row.minutes;
+  return log;
 }
 
 /** What the first sync after sign-in has to upload so a guest's local data ends up in the account. */
