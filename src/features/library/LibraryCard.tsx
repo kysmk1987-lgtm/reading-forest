@@ -4,7 +4,9 @@ import { Pressable, StyleSheet, View } from 'react-native';
 import { BookCover } from '@/components/BookCover';
 import { GrowthBadge } from '@/components/GrowthBadge';
 import { AppText, Button, IconButton, ProgressBar, StarRating } from '@/components/ui';
+import { speciesOf } from '@/features/forest/species';
 import { formatDisplayDate, formatTimestamp } from '@/lib/date';
+import { useEntitlements } from '@/lib/entitlements';
 import { tapFeedback } from '@/lib/feedback';
 import { colors, radius, softShadow, spacing } from '@/theme';
 import type { LibraryEntry } from '@/types';
@@ -22,6 +24,7 @@ export interface LibraryCardProps {
 
 export function LibraryCard({ entry, onOpen, onEdit, onDelete, onUpdateProgress }: LibraryCardProps) {
   const { t } = useTranslation();
+  const { isPremium } = useEntitlements();
   const meta = STATUS_META[entry.status];
   const percent = progressPercent(entry);
   const page = currentPageOf(entry);
@@ -59,7 +62,9 @@ export function LibraryCard({ entry, onOpen, onEdit, onDelete, onUpdateProgress 
                 {meta.emoji} {t(`status.${entry.status}`)}
               </AppText>
             </View>
-            {entry.status === 'reading' ? <GrowthBadge percent={percent} /> : null}
+            {entry.status === 'reading' || entry.status === 'read' ? (
+              <GrowthBadge percent={percent} species={speciesOf(entry, isPremium)} />
+            ) : null}
           </View>
           <AppText numberOfLines={2}>{entry.book.title}</AppText>
           <AppText variant="caption" muted numberOfLines={1}>

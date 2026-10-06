@@ -11,3 +11,4 @@ export { Screen } from './Screen';
 export { SegmentedControl } from './SegmentedControl';
 export { Sheet } from './Sheet';
 export { StarRating } from './StarRating';
+export { showToast, ToastHost } from './Toast';

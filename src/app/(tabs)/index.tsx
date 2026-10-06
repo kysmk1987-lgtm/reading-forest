@@ -1,23 +1,44 @@
 import { router } from 'expo-router';
-import { useMemo } from 'react';
+import { useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Pressable, StyleSheet, View } from 'react-native';
 
 import { BookCover } from '@/components/BookCover';
 import { GrowthBadge } from '@/components/GrowthBadge';
-import { SproutIllustration } from '@/components/SproutIllustration';
-import { AppText, Button, Card, IconButton, ProgressBar, Screen } from '@/components/ui';
-import { currentPageOf, growthStageFor, progressPercent } from '@/features/library/growth';
+import { AppText, Button, Card, IconButton, ProgressBar, Screen, showToast } from '@/components/ui';
+import { ForestGarden } from '@/features/forest/ForestGarden';
+import { treeFromEntry } from '@/features/forest/model';
+import { ShareForestSheet } from '@/features/forest/ShareForestSheet';
+import { SpeciesSheet } from '@/features/forest/SpeciesSheet';
+import { speciesOf } from '@/features/forest/species';
+import type { Weather } from '@/features/forest/WeatherLayer';
+import { currentPageOf, progressPercent } from '@/features/library/growth';
 import { STATUS_META } from '@/features/library/statusMeta';
+import { useEntitlements } from '@/lib/entitlements';
 import { tapFeedback } from '@/lib/feedback';
+import { useForestStore } from '@/stores/forestStore';
 import { useLibraryStore } from '@/stores/libraryStore';
 import { useProfileStore } from '@/stores/profileStore';
 import { colors, palette, radius, spacing } from '@/theme';
+
+const WEATHERS: { value: Weather; emoji: string; premium: boolean }[] = [
+  { value: 'clear', emoji: '☀️', premium: false },
+  { value: 'rain', emoji: '🌧️', premium: true },
+  { value: 'snow', emoji: '❄️', premium: true },
+];
 
 export default function HomeScreen() {
   const { t } = useTranslation();
   const nickname = useProfileStore((s) => s.nickname);
   const entriesMap = useLibraryStore((s) => s.entries);
+  const { isPremium, can } = useEntitlements();
+  const storedWeather = useForestStore((s) => s.weather);
+  const setWeather = useForestStore((s) => s.setWeather);
+  const weather = can('premiumTrees') ? storedWeather : 'clear';
+  const [speciesFor, setSpeciesFor] = useState<string | null>(null);
+  const [shareOpen, setShareOpen] = useState(false);
+
+  const trees = useMemo(() => Object.values(entriesMap).map((e) => treeFromEntry(e, isPremium)), [entriesMap, isPremium]);
 
   const summary = useMemo(() => {
     const entries = Object.values(entriesMap);
@@ -26,9 +47,8 @@ export default function HomeScreen() {
     const finishedThisYear = entries.filter((e) => e.status === 'read' && (e.endDate ?? '').startsWith(year)).length;
     const want = entries.filter((e) => e.status === 'want').length;
     const pages = entries.reduce((sum, e) => sum + (currentPageOf(e) ?? 0), 0);
-    const trees = entries.filter((e) => e.status === 'read').length;
-    const bestPercent = Math.max(0, ...reading.map(progressPercent), trees ? 100 : 0);
-    return { reading, finishedThisYear, want, pages, trees, bestPercent };
+    const grown = entries.filter((e) => e.status === 'read').length;
+    return { reading, finishedThisYear, want, pages, grown };
   }, [entriesMap]);
 
   const stats = [
@@ -38,22 +58,63 @@ export default function HomeScreen() {
     { label: t('home.pagesRead'), value: summary.pages, color: palette.yellowSoft, emoji: '📄' },
   ];
 
+  const speciesEntry = speciesFor ? entriesMap[speciesFor] : undefined;
+
   return (
     <Screen
       title={t('common.appName')}
       subtitle={t('home.greeting', { name: nickname })}
       headerRight={<IconButton name="search" accessibilityLabel={t('search.title')} onPress={() => router.push('/search')} />}>
-      <Card tint={palette.skySoft} edgeColor={palette.sky} style={styles.forest}>
-        <AppText variant="subtitle">{t('home.forestTitle')}</AppText>
-        <SproutIllustration emoji={growthStageFor(summary.bestPercent).emoji} size={210} />
-        <AppText variant="caption" center muted style={styles.lines}>
-          {summary.trees > 0 ? t('home.forestGrowing', { count: summary.trees }) : t('home.forestEmpty')}
-        </AppText>
-        <View style={styles.soonPill}>
-          <AppText variant="tiny" color={palette.woodShadow}>
-            {t('home.forestSoon')}
-          </AppText>
+      <Card tint={palette.skySoft} edgeColor={palette.sky} padded={false} style={styles.forest}>
+        <View style={styles.forestHeader}>
+          <View style={styles.flex}>
+            <AppText variant="subtitle">{t('forest.myForest')}</AppText>
+            <AppText variant="caption" muted>
+              {trees.length ? t('forest.summary', { trees: trees.length, grown: summary.grown }) : t('home.forestEmptyShort')}
+            </AppText>
+          </View>
+          <Button size="sm" variant="soft" label={`🔗 ${t('forest.share')}`} onPress={() => setShareOpen(true)} />
         </View>
+
+        <ForestGarden
+          trees={trees}
+          weather={weather}
+          emptyLabel={t('forest.emptySign')}
+          onOpenBook={(tree) => router.push({ pathname: '/book/[id]', params: { id: tree.bookId } })}
+          onChangeSpecies={(tree) => setSpeciesFor(tree.id)}
+        />
+
+        <View style={styles.weatherRow}>
+          {WEATHERS.map((w) => {
+            const locked = w.premium && !can('premiumTrees');
+            const active = weather === w.value;
+            return (
+              <Pressable
+                key={w.value}
+                accessibilityRole="button"
+                accessibilityState={{ selected: active, disabled: locked }}
+                onPress={() => {
+                  tapFeedback();
+                  if (locked) showToast(t('forest.weatherLocked'));
+                  else setWeather(w.value);
+                }}
+                style={[styles.weatherChip, active && styles.weatherActive, locked && styles.weatherLocked]}>
+                <AppText variant="tiny" color={locked ? colors.textMuted : colors.text}>
+                  {w.emoji} {t(`forest.weather.${w.value}`)}
+                  {locked ? ' 🔒' : ''}
+                </AppText>
+              </Pressable>
+            );
+          })}
+        </View>
+        <AppText variant="tiny" muted center style={styles.hint}>
+          {t('forest.tapHint')}
+        </AppText>
+        <Pressable accessibilityRole="link" onPress={() => router.push('/trees')} style={styles.guideLink}>
+          <AppText variant="caption" color={palette.skyDeep}>
+            {t('trees.open')} ›
+          </AppText>
+        </Pressable>
       </Card>
 
       <View style={styles.section}>
@@ -98,7 +159,7 @@ export default function HomeScreen() {
                     <AppText numberOfLines={1} style={styles.flex}>
                       {e.book.title}
                     </AppText>
-                    <GrowthBadge percent={percent} showLabel={false} />
+                    <GrowthBadge percent={percent} showLabel={false} species={speciesOf(e, isPremium)} />
                   </View>
                   <ProgressBar percent={percent} color={STATUS_META.reading.shadow} height={10} />
                   <AppText variant="tiny" muted>
@@ -110,19 +171,33 @@ export default function HomeScreen() {
           })
         )}
       </View>
+
+      <SpeciesSheet
+        entryId={speciesFor}
+        current={speciesEntry ? speciesOf(speciesEntry, isPremium) : undefined}
+        onClose={() => setSpeciesFor(null)}
+      />
+      <ShareForestSheet visible={shareOpen} onClose={() => setShareOpen(false)} trees={trees} />
     </Screen>
   );
 }
 
 const styles = StyleSheet.create({
-  forest: { alignItems: 'center', gap: spacing.sm },
-  lines: { lineHeight: 20 },
-  soonPill: {
-    backgroundColor: 'rgba(255,255,255,0.75)',
+  forest: { paddingVertical: spacing.md, gap: spacing.sm, overflow: 'hidden' },
+  forestHeader: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, paddingHorizontal: spacing.lg },
+  weatherRow: { flexDirection: 'row', justifyContent: 'center', gap: spacing.xs, paddingHorizontal: spacing.md },
+  weatherChip: {
     paddingHorizontal: spacing.md,
-    paddingVertical: 4,
+    paddingVertical: 5,
     borderRadius: radius.pill,
+    backgroundColor: 'rgba(255,253,246,0.85)',
+    borderWidth: 1.5,
+    borderColor: colors.border,
   },
+  weatherActive: { backgroundColor: colors.surface, borderColor: palette.skyDeep },
+  weatherLocked: { opacity: 0.7 },
+  hint: { paddingHorizontal: spacing.lg },
+  guideLink: { alignSelf: 'center', paddingVertical: 2 },
   section: { gap: spacing.sm },
   statGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm },
   stat: {

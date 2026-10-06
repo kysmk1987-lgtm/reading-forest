@@ -1,7 +1,8 @@
 import Constants from 'expo-constants';
+import { router } from 'expo-router';
 import { useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { StyleSheet, Switch, View } from 'react-native';
+import { Pressable, StyleSheet, Switch, View } from 'react-native';
 
 import { AppText, Button, Card, Input, Screen, SegmentedControl } from '@/components/ui';
 import { ENABLED_LOCALES, isLanguagePickerEnabled, LOCALE_LABELS } from '@/config/locale';
@@ -9,6 +10,7 @@ import { useAuthActions, type AuthErrorCode } from '@/features/auth/useAuth';
 import { STATUS_META } from '@/features/library/statusMeta';
 import { notify } from '@/lib/confirm';
 import { useEntitlements, useEntitlementsStore } from '@/lib/entitlements';
+import { tapFeedback } from '@/lib/feedback';
 import { useLibraryStore } from '@/stores/libraryStore';
 import { useProfileStore } from '@/stores/profileStore';
 import { useSettingsStore, type AppLanguage } from '@/stores/settingsStore';
@@ -135,6 +137,26 @@ export default function MyScreen() {
         <SettingRow label={t('my.premiumDevToggle')} value={isPremium} onChange={setPremium} />
       </Card>
 
+      <Pressable
+        accessibilityRole="button"
+        onPress={() => {
+          tapFeedback();
+          router.push('/gallery');
+        }}>
+        <Card tint={palette.pinkSoft} edgeColor={palette.pinkDeep} style={styles.galleryCard}>
+          <AppText style={styles.crown}>🖼️</AppText>
+          <View style={styles.flex}>
+            <AppText variant="subtitle">{t('gallery.title')}</AppText>
+            <AppText variant="caption" muted>
+              {t('my.galleryTeaser')}
+            </AppText>
+          </View>
+          <AppText variant="tiny" color={palette.pinkDeep}>
+            {t('common.comingSoon')}
+          </AppText>
+        </Card>
+      </Pressable>
+
       <Card style={styles.section}>
         <AppText variant="subtitle">{t('my.settings')}</AppText>
         {isLanguagePickerEnabled ? (
@@ -212,6 +234,7 @@ const styles = StyleSheet.create({
   stat: { flex: 1, alignItems: 'center', paddingVertical: spacing.md, borderRadius: radius.lg, gap: 2 },
   statEmoji: { fontSize: 18 },
   premium: { gap: spacing.md },
+  galleryCard: { flexDirection: 'row', alignItems: 'center', gap: spacing.md },
   crown: { fontSize: 32 },
   settingRow: {
     flexDirection: 'row',

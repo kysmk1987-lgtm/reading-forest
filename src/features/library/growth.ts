@@ -1,17 +1,24 @@
 import type { LibraryEntry } from '@/types';
 
-export type GrowthStage = 'seed' | 'sprout' | 'sapling' | 'tree';
+export type GrowthStage = 'seed' | 'sprout' | 'sapling' | 'young' | 'tree' | 'bloom';
 
-export const GROWTH_STAGES: { stage: GrowthStage; minPercent: number; emoji: string }[] = [
-  { stage: 'seed', minPercent: 0, emoji: '🌰' },
-  { stage: 'sprout', minPercent: 25, emoji: '🌱' },
-  { stage: 'sapling', minPercent: 50, emoji: '🌿' },
-  { stage: 'tree', minPercent: 90, emoji: '🌳' },
+/** Ordered growth stages; `bloom` (fruit/flowers) is reserved for finished books. */
+export const GROWTH_STAGES: { stage: GrowthStage; minPercent: number }[] = [
+  { stage: 'seed', minPercent: 0 },
+  { stage: 'sprout', minPercent: 10 },
+  { stage: 'sapling', minPercent: 35 },
+  { stage: 'young', minPercent: 60 },
+  { stage: 'tree', minPercent: 85 },
+  { stage: 'bloom', minPercent: 100 },
 ];
 
 export function growthStageFor(percent: number) {
   const p = Math.max(0, Math.min(100, percent));
   return [...GROWTH_STAGES].reverse().find((s) => p >= s.minPercent)!;
+}
+
+export function stageIndex(stage: GrowthStage) {
+  return GROWTH_STAGES.findIndex((s) => s.stage === stage);
 }
 
 /** Reading progress 0–100 for any entry. */

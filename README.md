@@ -5,9 +5,15 @@
 따뜻한 파스텔 자연 팔레트(잔디 초록 · 나무 · 베이지), 동글동글한 폰트, 눌리면 쏙 들어가는 말랑한 입체 버튼, 가벼운 탭 사운드와 진동으로 "책 읽는 숲"을 키워가는 앱입니다. 현재는 **한국 출시 버전**(한국어 UI · 국내 도서 검색)입니다.
 
 <p>
-  <img src="docs/screenshots/home-with-books.png" width="200" alt="숲 홈" />
-  <img src="docs/screenshots/detail.png" width="200" alt="책 상세" />
-  <img src="docs/screenshots/library.png" width="200" alt="서재" />
+  <img src="docs/screenshots/forest.png" width="180" alt="나만의 독서 숲" />
+  <img src="docs/screenshots/tree-stages.png" width="180" alt="나무 도감" />
+  <img src="docs/screenshots/calendar.png" width="180" alt="독서 캘린더" />
+  <img src="docs/screenshots/stats.png" width="180" alt="통계" />
+  <img src="docs/screenshots/water.png" width="180" alt="물 주기" />
+</p>
+<p>
+  <img src="docs/screenshots/detail.png" width="180" alt="책 상세" />
+  <img src="docs/screenshots/library.png" width="180" alt="서재" />
 </p>
 
 - **스택**: Expo (SDK 57) · TypeScript · Expo Router · Zustand(persist + AsyncStorage) · TanStack Query · Firebase JS SDK(Auth/Firestore) · i18next + expo-localization · Vercel 서버리스 함수(도서 검색 프록시)
@@ -84,17 +90,11 @@ npx vercel --prod --yes                                                         
 ### Firebase 연결 순서 (나중에)
 1. [Firebase 콘솔](https://console.firebase.google.com)에서 프로젝트 생성 → 웹 앱 추가 → 설정값을 `.env`/Vercel에 입력
 2. Authentication → 로그인 방법에서 **익명**, **Google** 사용 설정, 승인된 도메인에 `reading-forest-nine.vercel.app` 추가
-3. Firestore 데이터베이스 생성 후 규칙 예시:
-   ```
-   rules_version = '2';
-   service cloud.firestore {
-     match /databases/{db}/documents {
-       match /users/{uid}/{document=**} {
-         allow read, write: if request.auth != null && request.auth.uid == uid;
-       }
-     }
-   }
-   ```
+3. Firestore 데이터베이스 생성 후 저장소의 **`firestore.rules`** 내용을 콘솔 → Firestore → 규칙에 붙여넣고 게시합니다.
+   - `users/{uid}/**`: 본인만 읽기/쓰기 (서재 동기화)
+   - `forests/{uid}`: 누구나 보기, 주인만 공개(쓰기) — 숲 공유 페이지
+   - `forests/{uid}/waterings/{방문자uid}_{오늘UTC날짜}`: 방문자 본인만 생성, 수정·삭제 불가 → **숲 하나에 하루 한 번만 물 주기**
+4. 연결하면 홈의 **공유** 버튼이 내 숲을 `forests/{uid}`에 공개하고 `/forest/{uid}` 링크를 공유합니다(Web Share API → 복사, 앱은 공유 시트). 방문자는 익명 로그인으로 물을 줍니다.
 
 ## 🌏 나중에 해외 언어·해외 도서를 켜는 방법
 
@@ -115,35 +115,55 @@ api/                        # Vercel 서버리스 함수 (도서 검색 프록�
 src/
 ├─ app/                     # Expo Router 라우트 (파일 = 화면)
 │  ├─ _layout.tsx           # 폰트·QueryClient·Auth 리스너·Stack, 웹에서는 모바일 폭(480px)으로 중앙 정렬
-│  ├─ (tabs)/               # 하단 탭: 숲(index) · 서재 · 타이머 · 갤러리 · 마이
+│  ├─ (tabs)/               # 하단 탭: 숲(index) · 서재 · 기록(records: 캘린더·통계) · 타이머 · 마이
 │  ├─ search.tsx            # 책 검색 (제목/저자, ISBN, 바코드는 추후)
-│  └─ book/[id].tsx         # 책 상세 + 서재 담기
+│  ├─ book/[id].tsx         # 책 상세 + 서재 담기
+│  ├─ forest/[userId].tsx   # 공개 숲 페이지 (읽기 전용 + 물 주기), /forest/demo = 데모 숲
+│  ├─ trees.tsx             # 나무 도감 (종류별 성장 단계)
+│  └─ gallery.tsx           # 문장 갤러리 (곧 만나요, 마이에서 진입)
 ├─ config/                  # locale.ts(언어·지역), app.ts(API 주소)
 ├─ components/
 │  ├─ ui/                   # 디자인 시스템: Button(말랑 입체), Card, Chip, ProgressBar, Input, StarRating,
 │  │                        #   Screen, Sheet(바텀시트), SegmentedControl, DateField(.web), EmptyState, IconButton
 │  ├─ ForestTabBar.tsx      # 나무 판자 느낌의 커스텀 탭바 (+ 광고 자리)
-│  └─ BannerAdPlaceholder.tsx · BookCover.tsx · GrowthBadge.tsx · SproutIllustration.tsx
+│  └─ BannerAdPlaceholder.tsx · BookCover.tsx · GrowthBadge.tsx(작은 나무 그림)
 ├─ features/
 │  ├─ auth/useAuth.ts       # Firebase 익명/구글 로그인 훅 (미설정 시 게스트)
 │  ├─ books/                # 검색/상세 쿼리 훅(상세 정보로 서재 기록 자동 보강), 검색 결과 아이템
-│  └─ library/              # 기록 시트(4가지 상태), 서재 카드, 진행률 시트, 정렬, 성장 단계, Firestore 동기화
+│  ├─ forest/               # TreeGraphic(SVG 나무), AnimatedTree(흔들림·성장 애니메이션), ForestGarden(아이소메트릭 숲),
+│  │                        #   species(나무 종류), GrowthCelebration, SpeciesSheet, 날씨, 공유/물 주기(publicForest, demo)
+│  ├─ records/              # 독서 캘린더, 통계, 집계 함수
+│  └─ library/              # 기록 시트(4가지 상태), 서재 카드, 진행률 시트, 정렬, 성장 단계, 독서 로그, Firestore 동기화
 ├─ lib/
 │  ├─ api/books.ts          # 지역별 검색 클라이언트 (KR → /api 프록시)
 │  ├─ api/global/           # 해외용 Google Books · Open Library (BOOK_REGION=GLOBAL일 때만)
 │  ├─ i18n/                 # i18next 초기화 + locales/ko.ts(활성), en.ts(비활성)
 │  ├─ firebase.ts · feedback.ts(사운드+햅틱) · entitlements.ts(무료/프리미엄)
 │  └─ confirm.ts · date.ts · storage.ts · queryClient.ts
-├─ stores/                  # Zustand: library, profile, settings, bookCache
+├─ stores/                  # Zustand: library(+독서 로그), profile, settings, bookCache, forest(날씨·물 주기), celebration
 ├─ theme/                   # colors · typography · spacing(radius) · shadows
 └─ types/                   # Book, LibraryEntry, ReadingStatus ...
 scripts/test-book-api.ts    # 도서 API 오프라인 테스트
+firestore.rules             # Firestore 보안 규칙 (서재 동기화, 숲 공유, 하루 한 번 물 주기)
 vercel.json                 # 빌드 설정, /api 제외 SPA 리라이트, 함수 설정
 ```
 
-## ✅ 현재 기능 (1차)
+## ✅ 2차 기능 — 독서 숲
 
-- **하단 탭 5개**: 숲(새싹 정원 일러스트 + 오늘의 요약 + 이어 읽기), 서재, 타이머/갤러리(디자인된 "곧 만나요" 카드), 마이(프로필·닉네임·요금제 배지·프리미엄 카드·설정)
+- **하단 탭 5개 (재구성)**: 숲 · 서재 · **기록**(새로 추가: 캘린더·통계) · 타이머 · 마이. 갤러리는 탭에서 빠지고 **마이 → 문장 갤러리 카드**로 들어갑니다(아직 "곧 만나요").
+- **나무 성장 그래픽** (react-native-svg, 웹·앱 공통): 씨앗(0%) → 새싹(10%) → 묘목(35%) → 어린 나무(60%) → 큰 나무(85%) → 완독 시 **열매 나무**(열매/꽃). 은은한 흔들림 애니메이션, 단계가 오르면 **"나무가 자랐어요!"** 성장 애니메이션 + 효과음 + 진동. 서재·홈의 이모지 단계 아이콘도 작은 나무 그림으로 교체.
+- **나만의 독서 숲** (홈): 아이소메트릭(2.5D) 잔디 타일 정원. 읽는 중/완독 = 나무, 중단 = 그루터기, 읽고 싶은 책 = 씨앗 화분. 책이 늘면 정원이 넓어지고(3×3 → 4×4 → …) 옆으로 밀어서 볼 수 있어요. 나무를 누르면 표지·제목·진행률 말풍선 → 책 상세로 이동.
+- **나무 종류**: 무료 3종(둥근나무·소나무·사과나무, 책마다 자동 배정 + 말풍선의 **나무 바꾸기**), 프리미엄 3종(벚나무·바오밥나무·단풍나무)과 **숲 날씨(비·눈)** 는 잠금 표시(`entitlements` 모듈, 마이 → 프리미엄 미리보기(개발용) 스위치로 테스트). **나무 도감**(`/trees`)에서 종류별 성장 단계를 볼 수 있어요.
+- **독서 캘린더**: 월별 달력, 기록이 있는 날엔 책 표지 썸네일(+n), 전체 보기/완독 보기, 이전/다음 달, 날짜를 누르면 그날 읽은 책 목록.
+- **통계**: 읽는 중·완독·기록 수, 이번 달 독서한 날 링, 월별 독서량(권수/페이지 전환, 연도 선택).
+- **독서 로그**: 책 추가·진행률 업데이트·완독 때마다 `(날짜, 책, 읽은 쪽수)` 기록이 자동 저장됩니다. 기존 서재 데이터는 업데이트 시 시작일/완독일 기준으로 로그가 자동 생성됩니다(스토어 버전 1 마이그레이션).
+- **물 주기(응원)**: 공개 숲 페이지 `/forest/{id}` (읽기 전용 숲 + **물 주기 💧** 버튼, 물방울 애니메이션 + 횟수, 하루 한 번).
+  - **Firebase 연결 전(현재)**: 공유 버튼을 누르면 "Firebase 연결 후 공개 공유 가능" 안내와 함께 **내 숲 미리보기**, **데모 숲(`/forest/demo`)** 둘러보기, 데모 링크 복사를 제공합니다. 물 주기는 이 기기에만 기록됩니다.
+  - **Firebase 연결 후**: 내 숲을 Firestore에 공개하고 링크를 공유, 방문자 물 주기는 Firestore 규칙으로 하루 한 번 제한.
+
+## ✅ 1차 기능
+
+- **하단 탭 5개**: 숲, 서재, 타이머(디자인된 "곧 만나요" 카드), 마이(프로필·닉네임·요금제 배지·프리미엄 카드·설정)
 - **국내 도서 검색**: 제목/저자/출판사 · ISBN, 표지·제목·저자·출판사·출간일 표시, 이미 담은 책은 상태 배지
 - **책 상세**: 큰 표지, 책 소개, 저자/옮긴이, 출판사, 출간일, 쪽수, ISBN, 정가, 분류, 서점 링크
 - **기록 바텀시트** (상태별 입력 항목)
@@ -152,7 +172,6 @@ vercel.json                 # 빌드 설정, /api 제외 SPA 리라이트, 함�
   - 읽고 싶은 책: 기대지수(하트) · 기대평
   - 중단한 책: 시작/중단일 · 별점 · 한줄평
 - **서재**: 상태별 탭 + 개수, 정렬(최신 저장순/오래된 저장순/최근 수정순/제목순/평점순), 진행률 바(% · 현재/전체 쪽), 수정·삭제, 진행률 빠른 업데이트(100% 도달 시 자동 완독 처리)
-- **성장 단계**: 🌰 씨앗(0%) → 🌱 새싹(25%) → 🌿 묘목(50%) → 🌳 나무(90%)
 - **인증**: Firebase 설정 시 익명/구글(웹 팝업) 로그인 + Firestore 동기화, 미설정 시 로컬 게스트 프로필
 - **요금제 게이팅**: `entitlements` 모듈(`isPremium`, 기본 무료) + 무료 사용자에게만 하단 광고 자리 표시
 
@@ -161,7 +180,7 @@ vercel.json                 # 빌드 설정, /api 제외 SPA 리라이트, 함�
 | 단계 | 내용 |
 | --- | --- |
 | **1차** | 기반 + 기본 독서기록 ✅ |
-| **2차** | 독서 숲 — 성장 그래픽, 아이소메트릭 숲, 캘린더/통계, 물주기 |
+| **2차** | 독서 숲 — 성장 그래픽, 아이소메트릭 숲, 캘린더/통계, 물주기 ✅ (공개 공유는 Firebase 연결 후) |
 | **3차** | 뽀모도로 · 백색소음 · 3D 지구본 · 실시간 접속자 · 조용한 응원 · 테마룸 |
 | **4차** | 문장 카드(OCR) · 갤러리 · 번역(Functions, 무료 하루 10회) · 스마트 블러 |
 | **5차** | 독서 결산 · 인앱 결제(RevenueCat)/광고(AdMob) · 출시 |

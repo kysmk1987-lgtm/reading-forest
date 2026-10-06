@@ -11,8 +11,8 @@ import { BannerAdPlaceholder } from './BannerAdPlaceholder';
 export const TAB_ICONS: Record<string, string> = {
   index: '🌳',
   library: '📚',
+  records: '📅',
   timer: '⏰',
-  gallery: '🖼️',
   my: '🌼',
 };
 

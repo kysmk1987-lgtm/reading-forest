@@ -9,8 +9,8 @@ export default function TabsLayout() {
     <Tabs screenOptions={{ headerShown: false }} tabBar={(props) => <ForestTabBar {...props} />}>
       <Tabs.Screen name="index" options={{ title: t('tabs.home') }} />
       <Tabs.Screen name="library" options={{ title: t('tabs.library') }} />
+      <Tabs.Screen name="records" options={{ title: t('tabs.records') }} />
       <Tabs.Screen name="timer" options={{ title: t('tabs.timer') }} />
-      <Tabs.Screen name="gallery" options={{ title: t('tabs.gallery') }} />
       <Tabs.Screen name="my" options={{ title: t('tabs.my') }} />
     </Tabs>
   );

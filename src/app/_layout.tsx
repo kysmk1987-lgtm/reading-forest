@@ -12,7 +12,9 @@ import { useEffect } from 'react';
 import { Platform, StyleSheet, View } from 'react-native';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 
+import { ToastHost } from '@/components/ui';
 import { useAuthListener } from '@/features/auth/useAuth';
+import { GrowthCelebration } from '@/features/forest/GrowthCelebration';
 import { queryClient } from '@/lib/queryClient';
 import { colors, MAX_APP_WIDTH, palette } from '@/theme';
 
@@ -38,7 +40,12 @@ export default function RootLayout() {
               <Stack.Screen name="(tabs)" />
               <Stack.Screen name="search" />
               <Stack.Screen name="book/[id]" />
+              <Stack.Screen name="forest/[userId]" />
+              <Stack.Screen name="gallery" />
+              <Stack.Screen name="trees" />
             </Stack>
+            <GrowthCelebration />
+            <ToastHost />
           </View>
         </View>
       </QueryClientProvider>

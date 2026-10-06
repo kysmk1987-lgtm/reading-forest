@@ -1,7 +1,8 @@
+import { router } from 'expo-router';
 import { useTranslation } from 'react-i18next';
 import { StyleSheet, View } from 'react-native';
 
-import { AppText, EmptyState, Screen } from '@/components/ui';
+import { AppText, EmptyState, IconButton, Screen } from '@/components/ui';
 import { palette, radius, spacing } from '@/theme';
 
 const SAMPLE_CARDS = [
@@ -13,7 +14,15 @@ const SAMPLE_CARDS = [
 export default function GalleryScreen() {
   const { t } = useTranslation();
   return (
-    <Screen title={t('gallery.title')}>
+    <Screen
+      title={t('gallery.title')}
+      headerLeft={
+        <IconButton
+          name="chevron-back"
+          accessibilityLabel={t('common.back')}
+          onPress={() => (router.canGoBack() ? router.back() : router.replace('/my'))}
+        />
+      }>
       <EmptyState
         emoji="🖼️"
         tint={palette.pinkSoft}

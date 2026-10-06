@@ -24,8 +24,29 @@ export interface LibraryEntry {
   /** 기대지수: 0–5 hearts (status `want`). */
   expectation?: number;
   expectationNote?: string;
+  /** Tree species shown in the forest; defaults to a basic species derived from the book id. */
+  treeSpecies?: TreeSpeciesId;
 }
 
 export type LibraryEntryDraft = Omit<LibraryEntry, 'id' | 'createdAt' | 'updatedAt'>;
+
+export const TREE_SPECIES_IDS = ['round', 'pine', 'apple', 'cherry', 'baobab', 'maple'] as const;
+export type TreeSpeciesId = (typeof TREE_SPECIES_IDS)[number];
+
+/** `add`: started/added a book, `progress`: pages read, `complete`: finished the book. */
+export type ReadingLogKind = 'add' | 'progress' | 'complete';
+
+/** One reading activity on a day; powers the calendar and statistics. */
+export interface ReadingLog {
+  id: string;
+  entryId: string;
+  bookId: string;
+  /** ISO date `YYYY-MM-DD` (local). */
+  date: string;
+  kind: ReadingLogKind;
+  /** Pages read in this activity (0 when unknown). */
+  pagesDelta: number;
+  createdAt: number;
+}
 
 export const REVIEW_MAX_LENGTH = 500;
