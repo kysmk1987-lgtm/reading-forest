@@ -2,6 +2,8 @@
 
 > 책을 읽으면 나무가 자라는 독서 기록 앱
 
+> 📋 **이어서 작업하는 분(사람 · AI)은 먼저 [docs/HANDOFF.md](docs/HANDOFF.md)를 읽어주세요** — 결정 사항 · 배포 · 환경 변수 · 남은 일이 정리되어 있습니다. 다른 PC에서 시작하려면 [다른 PC에서 이어서 작업하기](#-다른-pc에서-이어서-작업하기).
+
 따뜻한 파스텔 자연 팔레트(잔디 초록 · 나무 · 베이지), 동글동글한 폰트, 눌리면 쏙 들어가는 말랑한 입체 버튼, 가벼운 탭 사운드와 진동(앱에서는 항상 켜짐)으로 "책 읽는 숲"을 키워가는 앱입니다. 현재는 **한국 출시 버전**(한국어 UI · 국내 도서 검색)입니다.
 
 <p>
@@ -21,6 +23,19 @@
 - **배포 주소**: https://reading-forest-nine.vercel.app
 
 ---
+
+## 💻 다른 PC에서 이어서 작업하기
+
+1. **Cursor 설치**: https://cursor.com 에서 내려받아 설치하고, 기존과 같은 계정으로 로그인합니다.
+2. **설정 스크립트 실행** (둘 중 하나)
+   - 저장소가 아직 없으면: 시작 메뉴에서 **PowerShell**을 열고 아래 한 줄을 붙여넣은 뒤 Enter
+     ```powershell
+     irm https://raw.githubusercontent.com/kysmk1987-lgtm/reading-forest/main/scripts/setup-new-pc.ps1 | iex
+     ```
+   - 이미 받아 둔 저장소 폴더가 있으면: 폴더 안의 **`새PC설정.bat`을 더블클릭**
+   
+   스크립트가 Git · Node.js · GitHub CLI를 (없으면) 설치하고, GitHub · Vercel 로그인(브라우저가 열리면 **기존과 같은 계정**으로 승인), 저장소 받기(`문서\GitHub\book`), `npm ci`, Vercel 프로젝트 연결, 개발용 환경 변수(`.env.local`) 받기까지 차례로 해 줍니다. 중간에 멈추면 메시지대로 해결하고 다시 실행하면 이어서 진행돼요.
+3. **Cursor에서 폴더 열기**: File → Open Folder → `문서\GitHub\book`. 터미널에서 `npx expo start --web`으로 실행하고, AI에게는 먼저 `docs/HANDOFF.md`를 읽게 하세요.
 
 ## 🚀 실행 방법
 

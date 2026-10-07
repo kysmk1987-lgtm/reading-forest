@@ -1,5 +1,9 @@
 This is an Expo/React Native mobile application. Prioritize mobile-first patterns, performance, and cross-platform compatibility.
 
+## Read `docs/HANDOFF.md` first
+
+Before doing any work, read `docs/HANDOFF.md` (Korean). It records the product decisions (Korea-first, Korean-only UI, Supabase, Kakao + Daum/Kyobo scraping, OCR removed, payments/ads/release deferred), deployment, env var names, applied Supabase migrations and pending items. Do not reverse those decisions without asking the user, never commit secrets, and update HANDOFF.md when you change something it describes.
+
 ## Expo has changed — do not trust your training data
 
 Expo ships breaking changes every SDK release. APIs you remember are likely renamed, moved, or removed. Before writing any code that touches an Expo, EAS, or React Native API:
