@@ -4,10 +4,13 @@ import { useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Pressable, StyleSheet, Switch, View } from 'react-native';
 
-import { AppText, Button, Card, Chip, Input, Screen, SegmentedControl, showToast } from '@/components/ui';
+import { AppText, Button, Card, Chip, Screen, SegmentedControl, showToast } from '@/components/ui';
 import { ENABLED_LOCALES, isLanguagePickerEnabled, LOCALE_LABELS } from '@/config/locale';
 import { useAuthActions, type AuthErrorCode } from '@/features/auth/useAuth';
 import { STATUS_META } from '@/features/library/statusMeta';
+import { AvatarPortrait } from '@/features/profile/AvatarArt';
+import { effectiveAvatar } from '@/features/profile/avatars';
+import { ProfileSheet } from '@/features/profile/ProfileSheet';
 import { REGIONS, regionName } from '@/features/together/regions';
 import { hideMyReviews, isReviewsConfigured } from '@/features/reviews/api';
 import { confirmAsync, notify } from '@/lib/confirm';
@@ -28,8 +31,11 @@ export default function MyScreen() {
   const setPremium = useEntitlementsStore((s) => s.setPremium);
   const settings = useSettingsStore();
   const auth = useAuthActions();
-  const [editingName, setEditingName] = useState(false);
-  const [nameDraft, setNameDraft] = useState(profile.nickname);
+  const [profileOpen, setProfileOpen] = useState(false);
+  const openProfile = () => {
+    tapFeedback();
+    setProfileOpen(true);
+  };
 
   const counts = useMemo(() => {
     const c = { read: 0, reading: 0, want: 0, stopped: 0 };
@@ -57,34 +63,23 @@ export default function MyScreen() {
   return (
     <Screen title={t('my.title')}>
       <Card style={styles.profile}>
-        <View style={styles.avatar}>
-          <AppText style={styles.avatarEmoji}>🌱</AppText>
-        </View>
+        <Pressable accessibilityRole="button" accessibilityLabel={t('my.editProfile')} onPress={openProfile} style={styles.avatar}>
+          <AvatarPortrait id={effectiveAvatar(profile.avatar, isPremium)} size={62} />
+        </Pressable>
         <View style={styles.profileInfo}>
-          {editingName ? (
-            <Input
-              value={nameDraft}
-              onChangeText={setNameDraft}
-              maxLength={16}
-              autoFocus
-              placeholder={t('my.nicknamePlaceholder')}
-              onSubmitEditing={() => {
-                profile.setNickname(nameDraft);
-                setEditingName(false);
-              }}
-            />
-          ) : (
-            <View style={styles.nameRow}>
-              <AppText variant="title" numberOfLines={1} style={styles.flex}>
-                {profile.nickname}
+          <View style={styles.nameRow}>
+            <AppText variant="title" numberOfLines={1} style={styles.flex}>
+              {profile.nickname}
+            </AppText>
+            <View style={[styles.planBadge, isPremium && styles.planBadgePremium]}>
+              <AppText variant="tiny" color={isPremium ? colors.text : colors.textMuted}>
+                {isPremium ? `👑 ${t('my.premium')}` : t('my.free')}
               </AppText>
-              <View style={[styles.planBadge, isPremium && styles.planBadgePremium]}>
-                <AppText variant="tiny" color={isPremium ? colors.text : colors.textMuted}>
-                  {isPremium ? `👑 ${t('my.premium')}` : t('my.free')}
-                </AppText>
-              </View>
             </View>
-          )}
+          </View>
+          <AppText variant="caption" muted numberOfLines={1}>
+            🌳 {profile.forestName || t('forest.myForest')}
+          </AppText>
           <AppText variant="caption" muted>
             {accountLabel}
             {profile.email ? ` · ${profile.email}` : ''}
@@ -93,16 +88,7 @@ export default function MyScreen() {
       </Card>
 
       <View style={styles.row}>
-        <Button
-          size="sm"
-          variant="soft"
-          label={editingName ? t('common.save') : t('my.editNickname')}
-          onPress={() => {
-            if (editingName) profile.setNickname(nameDraft);
-            else setNameDraft(profile.nickname);
-            setEditingName(!editingName);
-          }}
-        />
+        <Button size="sm" variant="soft" label={`✏️ ${t('my.editProfile')}`} onPress={openProfile} />
         {auth.isSupabaseConfigured && profile.authMode !== 'guest' ? (
           <Button
             size="sm"
@@ -253,6 +239,7 @@ export default function MyScreen() {
           </AppText>
         </View>
       </Card>
+      <ProfileSheet visible={profileOpen} onClose={() => setProfileOpen(false)} />
     </Screen>
   );
 }
@@ -308,8 +295,8 @@ const styles = StyleSheet.create({
     borderColor: palette.wood,
     alignItems: 'center',
     justifyContent: 'center',
+    overflow: 'hidden',
   },
-  avatarEmoji: { fontSize: 36, lineHeight: 44 },
   profileInfo: { flex: 1, gap: 4 },
   nameRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
   planBadge: {

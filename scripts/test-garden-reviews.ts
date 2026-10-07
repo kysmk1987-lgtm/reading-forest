@@ -5,7 +5,9 @@
 import assert from 'node:assert/strict';
 
 import { parsePageCount } from '../api/_lib/pages';
+import { DEFAULT_CRITTER, effectiveCritter } from '../src/features/forest/critters';
 import { GARDEN_MAX, gardenSize, layoutGarden, tileAt, transplant, validGardenCoord } from '../src/features/forest/layout';
+import { DEFAULT_AVATAR, effectiveAvatar } from '../src/features/profile/avatars';
 import { defaultProgressUnit, pagesDisplay } from '../src/features/library/pages';
 import { entryToRow, rowToEntry, withoutGardenColumns } from '../src/features/library/syncMapping';
 import { cleanReviewBody, distributionPercents, normalizeRating, summarize } from '../src/features/reviews/aggregate';
@@ -102,6 +104,28 @@ test('garden tiles sync through user_books.garden_x/garden_y', () => {
   assert.equal(back.gardenX, 2);
   assert.equal(back.gardenY, 4);
   assert.equal(rowToEntry({ ...row, garden_x: 99 }).gardenX, undefined);
+});
+test('초기화: pinning the pre-edit layout and the old extra restores the original garden', () => {
+  const start = layoutGarden(trees(4), 0);
+  const moved = transplant(start.positions, 't0', { c: 0, r: 0 }, start.n)!;
+  const pinned = (layout: Record<string, { c: number; r: number }>) => trees(4).map((t) => ({ ...t, gardenX: layout[t.id].c, gardenY: layout[t.id].r }));
+  assert.notDeepEqual(layoutGarden(pinned(moved), 2).positions, start.positions);
+  const restored = layoutGarden(pinned(start.positions), 0);
+  assert.equal(restored.n, start.n);
+  assert.deepEqual(restored.positions, start.positions);
+});
+
+console.log('premium decorations');
+test('premium critters and avatars fall back to the free default when premium is off', () => {
+  assert.equal(effectiveCritter('frog', false), DEFAULT_CRITTER);
+  assert.equal(effectiveCritter('frog', true), 'frog');
+  assert.equal(effectiveCritter('ladybug', false), 'ladybug');
+  assert.equal(effectiveCritter('none', false), 'none');
+  assert.equal(effectiveCritter('dragon', true), DEFAULT_CRITTER);
+  assert.equal(effectiveAvatar('bunny', false), DEFAULT_AVATAR);
+  assert.equal(effectiveAvatar('bunny', true), 'bunny');
+  assert.equal(effectiveAvatar('glasses', false), 'glasses');
+  assert.equal(effectiveAvatar(null, true), DEFAULT_AVATAR);
 });
 
 console.log('review aggregation');

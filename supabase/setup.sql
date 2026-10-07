@@ -1,5 +1,5 @@
 -- 독서의숲 Supabase 전체 설정 (자동 생성: npm run build:sql)
--- 새 프로젝트의 SQL Editor에 통째로 붙여넣고 Run 하세요. 포함된 마이그레이션: 0001_init.sql, 0002_focus_minutes.sql, 0003_gallery.sql, 0004_garden_reviews.sql
+-- 새 프로젝트의 SQL Editor에 통째로 붙여넣고 Run 하세요. 포함된 마이그레이션: 0001_init.sql, 0002_focus_minutes.sql, 0003_gallery.sql, 0004_garden_reviews.sql, 0005_profile_forest_avatar.sql
 -- 이미 일부를 적용했다면 아직 적용하지 않은 supabase/setup_<번호>.sql 파일만 실행하세요.
 
 -- ═══════════════ 0001_init.sql ═══════════════
@@ -881,3 +881,16 @@ revoke execute on function public.book_reviews_feed(text, integer, integer) from
 grant execute on function public.upsert_book_review(text, numeric, text, text) to authenticated;
 grant execute on function public.book_review_summary(text) to anon, authenticated;
 grant execute on function public.book_reviews_feed(text, integer, integer) to anon, authenticated;
+
+-- ═══════════════ 0005_profile_forest_avatar.sql ═══════════════
+-- 7차: 프로필 꾸미기 — 숲 이름 · 아바타
+--
+--   · profiles.forest_name: 홈 숲 카드 제목 (null = 기본 '나만의 독서 숲')
+--   · profiles.avatar: 프로필 캐릭터 id (null = 기본 새싹). 프리미엄 캐릭터 여부는 앱에서 판단합니다.
+--   · 클라이언트는 닉네임처럼 두 칸만 직접 고칠 수 있습니다 (is_premium은 계속 막힘).
+
+alter table public.profiles
+  add column if not exists forest_name text check (forest_name is null or char_length(forest_name) <= 32),
+  add column if not exists avatar text check (avatar is null or avatar ~ '^[a-z][a-z0-9_-]{0,31}$');
+
+grant update (forest_name, avatar) on public.profiles to authenticated;

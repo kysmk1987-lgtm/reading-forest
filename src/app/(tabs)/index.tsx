@@ -6,13 +6,17 @@ import { Pressable, StyleSheet, View } from 'react-native';
 import { BookCover } from '@/components/BookCover';
 import { GrowthBadge } from '@/components/GrowthBadge';
 import { AppText, Button, Card, IconButton, ProgressBar, Screen, showToast } from '@/components/ui';
+import { CritterIcon } from '@/features/forest/CritterLayer';
+import { CRITTERS, effectiveCritter, PREMIUM_CRITTERS } from '@/features/forest/critters';
 import { ForestGarden } from '@/features/forest/ForestGarden';
+import { layoutGarden, type Tile } from '@/features/forest/layout';
 import { treeFromEntry } from '@/features/forest/model';
 import { ShareForestSheet } from '@/features/forest/ShareForestSheet';
 import { SpeciesSheet } from '@/features/forest/SpeciesSheet';
 import { speciesOf } from '@/features/forest/species';
 import type { Weather } from '@/features/forest/WeatherLayer';
 import { currentPageOf, progressPercent } from '@/features/library/growth';
+import { effectiveAvatar } from '@/features/profile/avatars';
 import { STATUS_META } from '@/features/library/statusMeta';
 import { WrappedBanner } from '@/features/wrapped/WrappedBanner';
 import { useEntitlements } from '@/lib/entitlements';
@@ -41,9 +45,37 @@ export default function HomeScreen() {
   const [editing, setEditing] = useState(false);
   const gardenExtra = useForestStore((s) => s.gardenExtra);
   const expandGarden = useForestStore((s) => s.expandGarden);
+  const setGardenExtra = useForestStore((s) => s.setGardenExtra);
   const plantTrees = useLibraryStore((s) => s.plantTrees);
+  const forestName = useProfileStore((s) => s.forestName);
+  const avatar = effectiveAvatar(useProfileStore((s) => s.avatar), isPremium);
+  const critter = effectiveCritter(useForestStore((s) => s.critter), can('premiumTrees'));
+  const setCritter = useForestStore((s) => s.setCritter);
+  /** Layout when 옮겨 심기 started, so 초기화 can put everything back. */
+  const [editStart, setEditStart] = useState<{ positions: Record<string, Tile>; extra: number } | null>(null);
 
   const trees = useMemo(() => Object.values(entriesMap).map((e) => treeFromEntry(e, isPremium)), [entriesMap, isPremium]);
+  const currentPositions = useMemo(() => layoutGarden(trees, gardenExtra).positions, [trees, gardenExtra]);
+  const editChanged =
+    !!editStart &&
+    (editStart.extra !== gardenExtra ||
+      Object.entries(editStart.positions).some(([id, tile]) => currentPositions[id] && (currentPositions[id].c !== tile.c || currentPositions[id].r !== tile.r)));
+
+  const startEditing = () => {
+    setEditStart({ positions: currentPositions, extra: gardenExtra });
+    setEditing(true);
+  };
+  const resetEditing = () => {
+    if (!editStart) return;
+    setGardenExtra(editStart.extra);
+    const kept = Object.fromEntries(Object.entries(editStart.positions).filter(([id]) => entriesMap[id]));
+    plantTrees(kept);
+    showToast(t('forest.resetDone'));
+  };
+  const finishEditing = () => {
+    setEditing(false);
+    setEditStart(null);
+  };
 
   const summary = useMemo(() => {
     const entries = Object.values(entriesMap);
@@ -73,35 +105,37 @@ export default function HomeScreen() {
       <Card tint={palette.skySoft} edgeColor={palette.sky} padded={false} style={styles.forest}>
         <View style={styles.forestHeader}>
           <View style={styles.flex}>
-            <AppText variant="subtitle">{t('forest.myForest')}</AppText>
+            <AppText variant="subtitle" numberOfLines={1}>
+              {forestName || t('forest.myForest')}
+            </AppText>
             <AppText variant="caption" muted>
               {trees.length ? t('forest.summary', { trees: trees.length, grown: summary.grown }) : t('home.forestEmptyShort')}
             </AppText>
           </View>
-          {editing ? (
+          {editing ? null : (
             <>
-              <Button
-                size="sm"
-                variant="soft"
-                label={`➕ ${t('forest.expand')}`}
-                disabled={gardenExtra >= 6}
-                onPress={() => {
-                  tapFeedback();
-                  expandGarden();
-                  showToast(t('forest.expanded'));
-                }}
-              />
-              <Button size="sm" label={t('forest.transplantDone')} onPress={() => setEditing(false)} />
-            </>
-          ) : (
-            <>
-              {trees.length > 0 ? (
-                <Button size="sm" variant="soft" label={`🪴 ${t('forest.transplant')}`} onPress={() => setEditing(true)} />
-              ) : null}
+              {trees.length > 0 ? <Button size="sm" variant="soft" label={`🪴 ${t('forest.transplant')}`} onPress={startEditing} /> : null}
               <Button size="sm" variant="soft" label={`🔗 ${t('forest.share')}`} onPress={() => setShareOpen(true)} />
             </>
           )}
         </View>
+        {editing ? (
+          <View style={styles.editRow}>
+            <Button
+              size="sm"
+              variant="soft"
+              label={`➕ ${t('forest.expand')}`}
+              disabled={gardenExtra >= 6}
+              onPress={() => {
+                tapFeedback();
+                expandGarden();
+                showToast(t('forest.expanded'));
+              }}
+            />
+            <Button size="sm" variant="soft" label={`↩️ ${t('forest.reset')}`} disabled={!editChanged} onPress={resetEditing} />
+            <Button size="sm" label={t('forest.transplantDone')} onPress={finishEditing} />
+          </View>
+        ) : null}
 
         <ForestGarden
           trees={trees}
@@ -112,6 +146,8 @@ export default function HomeScreen() {
           onTransplant={plantTrees}
           onOpenBook={(tree) => router.push({ pathname: '/book/[id]', params: { id: tree.bookId } })}
           onChangeSpecies={(tree) => setSpeciesFor(tree.id)}
+          critter={critter}
+          avatar={avatar}
         />
 
         <View style={styles.weatherRow}>
@@ -131,6 +167,31 @@ export default function HomeScreen() {
                 style={[styles.weatherChip, active && styles.weatherActive, locked && styles.weatherLocked]}>
                 <AppText variant="tiny" color={locked ? colors.textMuted : colors.text}>
                   {w.emoji} {t(`forest.weather.${w.value}`)}
+                  {locked ? ' 🔒' : ''}
+                </AppText>
+              </Pressable>
+            );
+          })}
+        </View>
+        <View style={styles.weatherRow}>
+          {CRITTERS.map((c) => {
+            const locked = PREMIUM_CRITTERS.includes(c) && !can('premiumTrees');
+            const active = critter === c;
+            return (
+              <Pressable
+                key={c}
+                accessibilityRole="button"
+                accessibilityLabel={t(`forest.critter.${c}`)}
+                accessibilityState={{ selected: active, disabled: locked }}
+                onPress={() => {
+                  tapFeedback();
+                  if (locked) showToast(t('forest.critterLocked'));
+                  else setCritter(c);
+                }}
+                style={[styles.weatherChip, styles.critterChip, active && styles.weatherActive, locked && styles.weatherLocked]}>
+                {c !== 'none' ? <CritterIcon kind={c} size={14} /> : null}
+                <AppText variant="tiny" color={locked ? colors.textMuted : colors.text}>
+                  {t(`forest.critter.${c}`)}
                   {locked ? ' 🔒' : ''}
                 </AppText>
               </Pressable>
@@ -233,7 +294,9 @@ export default function HomeScreen() {
 const styles = StyleSheet.create({
   forest: { paddingVertical: spacing.md, gap: spacing.sm, overflow: 'hidden' },
   forestHeader: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, paddingHorizontal: spacing.lg },
-  weatherRow: { flexDirection: 'row', justifyContent: 'center', gap: spacing.xs, paddingHorizontal: spacing.md },
+  weatherRow: { flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'center', gap: spacing.xs, paddingHorizontal: spacing.md },
+  editRow: { flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'flex-end', gap: spacing.xs, paddingHorizontal: spacing.lg },
+  critterChip: { flexDirection: 'row', alignItems: 'center', gap: 3, paddingHorizontal: spacing.sm },
   weatherChip: {
     paddingHorizontal: spacing.md,
     paddingVertical: 5,

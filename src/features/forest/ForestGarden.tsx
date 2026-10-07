@@ -1,14 +1,19 @@
-import { useMemo, useRef, useState, type ReactNode } from 'react';
+import { Fragment, useMemo, useRef, useState, type ReactNode } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Pressable, ScrollView, StyleSheet, View, type GestureResponderEvent, type LayoutChangeEvent, type StyleProp, type ViewStyle } from 'react-native';
 import Svg, { Circle, Ellipse, G, Polygon } from 'react-native-svg';
 
 import { BookCover } from '@/components/BookCover';
 import { AppText, Button, ProgressBar } from '@/components/ui';
+import { stageIndex } from '@/features/library/growth';
+import { AvatarReader } from '@/features/profile/AvatarArt';
+import { AVATARS, type AvatarId } from '@/features/profile/avatars';
 import { digFeedback, tapFeedback } from '@/lib/feedback';
 import { colors, palette, radius, softShadow, spacing } from '@/theme';
 
 import { AnimatedTree } from './AnimatedTree';
+import { CritterLayer, type CritterSpot } from './CritterLayer';
+import type { Critter } from './critters';
 import { DirtBurst } from './DirtBurst';
 import { layoutGarden, tileAt, tileKey, transplant, type Tile } from './layout';
 import { treeLook, type ForestTree } from './model';
@@ -25,6 +30,7 @@ const HIT_TOP = TREE * 0.18;
 const BUBBLE_W = 220;
 const BUBBLE_H = 118;
 const DRAG_SLOP = 8;
+const READER = 34;
 
 export { gardenSize } from './layout';
 
@@ -45,6 +51,10 @@ export interface ForestGardenProps {
   extra?: number;
   /** New tile for every tree after a move/swap. */
   onTransplant?: (positions: Record<string, Tile>) => void;
+  /** Little creatures at the front of the garden. */
+  critter?: Critter;
+  /** Profile character reading in the shade of the biggest tree (the sprout shows nobody). */
+  avatar?: AvatarId;
 }
 
 type Offset = { dx: number; dy: number };
@@ -115,9 +125,12 @@ export function ForestGarden({
   editing = false,
   extra = 0,
   onTransplant,
+  critter = 'none',
+  avatar,
 }: ForestGardenProps) {
   const { t } = useTranslation();
-  const [selectedId, setSelectedId] = useState<string | null>(null);
+  /** The species is part of the selection so the book bubble closes once the tree is changed (나무 바꾸기). */
+  const [selection, setSelection] = useState<{ id: string; species: string } | null>(null);
   const [movingId, setMovingId] = useState<string | null>(null);
   const [drag, setDrag] = useState<(Offset & { id: string }) | null>(null);
   const [bursts, setBursts] = useState<{ tile: Tile; key: number }[]>([]);
@@ -141,8 +154,19 @@ export function ForestGarden({
   );
 
   const moving = editing ? placed.find((p) => p.tree.id === movingId) : undefined;
-  const selected = editing ? undefined : placed.find((p) => p.tree.id === selectedId);
+  const selected = editing ? undefined : placed.find((p) => p.tree.id === selection?.id && p.tree.species === selection.species);
   const occupied = new Set(placed.map((p) => tileKey(p)));
+
+  const readerTreeId = useMemo(() => {
+    if (!avatar || !AVATARS[avatar].person) return null;
+    let best: { id: string; score: number; createdAt: number } | null = null;
+    for (const { tree } of placed) {
+      const look = treeLook(tree);
+      const score = look.variant === 'growing' ? stageIndex(look.stage) + 1 : 0;
+      if (!best || score > best.score || (score === best.score && tree.createdAt < best.createdAt)) best = { id: tree.id, score, createdAt: tree.createdAt };
+    }
+    return best?.id ?? null;
+  }, [placed, avatar]);
   const dropTile = (from: Tile, o: Offset) => {
     const { x, y } = tileTop(from.c, from.r);
     return tileAt(x + o.dx, y + TH / 2 + o.dy, n, { tw: TW, th: TH, head: HEAD });
@@ -175,6 +199,22 @@ export function ForestGarden({
   const bottomY = HEAD + n * TH;
   const midY = HEAD + (n * TH) / 2;
 
+  /** Ground points on the front half of the garden, empty tiles first. */
+  const critterSpots: CritterSpot[] = [];
+  if (critter !== 'none' && !editing) {
+    const front: (Tile & { free: boolean; h: number })[] = [];
+    for (let r = 0; r < n; r++) {
+      for (let c = 0; c < n; c++) {
+        if (c + r >= n - 1) front.push({ c, r, free: !occupied.has(`${c}:${r}`), h: hash(c * 31 + r * 17 + n) });
+      }
+    }
+    front.sort((a, b) => Number(b.free) - Number(a.free) || a.h - b.h);
+    for (const tile of front.slice(0, 6)) {
+      const { x, y } = tileTop(tile.c, tile.r);
+      critterSpots.push({ x: offsetX + x + (tile.free ? 0 : TW * 0.22), y: y + TH / 2 + (tile.free ? 4 : TH * 0.3) });
+    }
+  }
+
   const tileStyle = (c: number, r: number) => {
     const key = `${c}:${r}`;
     const base = (c + r) % 2 ? '#A8DC86' : '#9DD47C';
@@ -196,7 +236,7 @@ export function ForestGarden({
     <Pressable
       onPress={() => {
         if (Date.now() - lastTreeGesture.current < 500) return;
-        setSelectedId(null);
+        setSelection(null);
         setMovingId(null);
       }}
       style={{ width: groundW, height: H }}
@@ -288,17 +328,23 @@ export function ForestGarden({
           );
         }
         return (
-          <Pressable
-            key={tree.id}
-            accessibilityRole="button"
-            accessibilityLabel={tree.title}
-            onPress={() => {
-              tapFeedback();
-              setSelectedId(tree.id === selectedId ? null : tree.id);
-            }}
-            style={hitStyle}>
-            {art}
-          </Pressable>
+          <Fragment key={tree.id}>
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel={tree.title}
+              onPress={() => {
+                tapFeedback();
+                setSelection(tree.id === selected?.tree.id ? null : { id: tree.id, species: tree.species });
+              }}
+              style={hitStyle}>
+              {art}
+            </Pressable>
+            {avatar && tree.id === readerTreeId ? (
+              <View style={[styles.reader, { left: offsetX + x + TW * 0.24 - READER / 2, top: y + TH / 2 + 9 - READER }]}>
+                <AvatarReader id={avatar} size={READER} />
+              </View>
+            ) : null}
+          </Fragment>
         );
       })}
 
@@ -325,6 +371,8 @@ export function ForestGarden({
         const { x, y } = tileTop(tile.c, tile.r);
         return <DirtBurst key={key} runKey={key} x={offsetX + x} y={y + TH / 2} />;
       })}
+
+      <CritterLayer kind={critter} spots={critterSpots} />
 
       {weather !== 'clear' ? <WeatherLayer kind={weather} width={groundW} height={H} /> : null}
 
@@ -401,6 +449,7 @@ const styles = StyleSheet.create({
   viewport: { width: '100%', alignItems: 'center' },
   hit: { position: 'absolute', width: HIT_W, height: TREE * 0.92 - HIT_TOP },
   dragging: { zIndex: 30 },
+  reader: { pointerEvents: 'none', position: 'absolute', width: READER, height: READER },
   tileHit: { position: 'absolute', width: TW / 2, height: TH / 2, zIndex: 12 },
   treeArt: { pointerEvents: 'none', position: 'absolute', left: -(TREE - HIT_W) / 2, top: -HIT_TOP, width: TREE, height: TREE },
   emptySign: {

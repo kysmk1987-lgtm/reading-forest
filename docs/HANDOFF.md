@@ -31,7 +31,7 @@ src/features/   기능별 코드: forest · library · records · together · so
 src/components/ 디자인 시스템(ui/) · 탭바 · 표지 등
 src/stores/     Zustand 스토어 (library, settings, forest, profile, entitlements, bookCache, timer …)
 src/config/     locale.ts(언어·지역) · app.ts(API 주소) · bestsellers.ts(직접 고른 목록)
-supabase/       migrations/0001~0004 + setup*.sql(붙여넣기용, npm run build:sql로 생성)
+supabase/       migrations/0001~0005 + setup*.sql(붙여넣기용, npm run build:sql로 생성)
 scripts/        테스트 · 생성 스크립트 · setup-new-pc.ps1 · e2e/(헤드리스 브라우저 점검)
 docs/           HANDOFF.md(이 문서) · screenshots/
 ```
@@ -44,9 +44,10 @@ docs/           HANDOFF.md(이 문서) · screenshots/
 4. **도서 데이터**: 검색은 **카카오 책 검색 API**(서버 프록시, 키는 서버에만). **쪽수는 다음(Daum) 책 페이지 스크래핑**이 1순위, **베스트셀러는 인터넷 교보문고 JSON 스크래핑**이 1순위 — 이용약관 · 구조 변경 위험을 **사용자가 알고 수락함**. 끄는 스위치: `ENABLE_DAUM_PAGES=false`, `ENABLE_KYOBO_BESTSELLERS=false`.
 5. **알라딘 OpenAPI는 2026-10-30 종료** → 의존하지 않음(키가 있으면 보조로만).
 6. **함께 읽기 지도는 한국 지도**(17개 시·도). 세계 지도/3D 지구본은 `EXPO_PUBLIC_MAP_SCOPE=GLOBAL` 자리만 있음.
-7. **OCR(사진 글자 인식) 제거** — tesseract.js · expo-image-picker 삭제. 다시 넣지 않음.
+7. **OCR(사진 글자 인식) 제거** — tesseract.js 삭제. 다시 넣지 않음. (`expo-image-picker`는 2026-10-07 **문구 카드 '사진' 배경(프리미엄)** 용도로만 다시 설치 — OCR과 무관)
 8. **번역 기능은 꺼짐** (`EXPO_PUBLIC_TRANSLATION_ENABLED` 플래그 + 스텁만 있음, 외부 번역 API 호출 없음).
 9. **독서 DNA 결산 요약 카드 내보내기는 프리미엄 전용** (`entitlements` 게이팅 그대로).
+   - 문구 카드 배경: 무료 = 종이 · 숲 · 수채화, 프리미엄 = 밤하늘 · 벚꽃 · 바다 · **사진(내 사진 업로드)** (`src/features/gallery/templates.ts`). 사진은 기기에서만 쓰이고, 갤러리에는 캡처된 카드 PNG(`cards` 버킷)에 합쳐져 올라가므로 별도 버킷 · 마이그레이션 없음(`template = 'photo'`로 저장).
 10. **결제(RevenueCat) · 광고(AdMob) · 스토어 출시는 보류** — 사용자가 직접 검토한 뒤 진행. 요금제 게이팅 구조(`src/lib/entitlements.ts`, 마이 → 프리미엄 미리보기(개발용))는 그대로 둠.
 11. 진동은 앱에서 항상 켜짐(설정 토글 없음). 한줄평 공개 범위 기본값은 전체 공개.
 12. 비밀 값은 절대 커밋하지 않음 (카카오 키, `.env.local`, service_role 키, DB 비밀번호). 커밋 전 `git diff --cached`를 키 패턴으로 검사.
@@ -77,10 +78,12 @@ docs/           HANDOFF.md(이 문서) · screenshots/
   | `0002_focus_minutes.sql` | 집중 시간 · 소리/독서실 기록 | ✅ |
   | `0003_gallery.sql` | 문장 카드 · 갤러리 · 블러 · Storage | ✅ |
   | `0004_garden_reviews.sql` | 나무 위치(`garden_x/y`) · 책 리뷰 · 신고 | ✅ (2026-10-07 확인) |
+  | `0005_profile_forest_avatar.sql` | 프로필 숲 이름(`profiles.forest_name`) · 캐릭터(`profiles.avatar`) | ❌ **미적용** — `supabase/setup_0005.sql`을 SQL Editor에서 실행 (적용 전에는 앱이 이 기기에만 저장하고 서버 동기화는 조용히 건너뜀) |
 - 새 마이그레이션은 `0005_…sql`로 추가 → `npm run build:sql`로 `setup_0005.sql` 생성 → 사용자가 SQL Editor에 붙여넣어 실행(에이전트는 DB 비밀번호를 묻지 않음).
 - 로컬 테스트는 `scripts/e2e/mock-sb.mjs`(PGlite로 실제 마이그레이션 실행)를 사용.
 
 ## 7. 남은 일 (우선순위 순)
+0. **마이그레이션 0005 적용** — `supabase/setup_0005.sql`을 Supabase SQL Editor에 붙여넣고 Run (숲 이름 · 캐릭터 계정 동기화용).
 1. **도서관 정보나루 키 승인 대기** — 승인되면 코드 변경 없이 자동 사용(베스트셀러 2순위, 쪽수 보조). 확인: 정보나루 마이페이지의 상태가 '승인'인지.
 2. **카카오 로그인 공급자 설정**(README "로그인 설정" 참고): Kakao Developers에서 카카오 로그인 활성화 · Redirect URI `https://ucftmqkmjwwasknanimz.supabase.co/auth/v1/callback` · 동의항목 · Client Secret → Supabase Authentication → Providers → Kakao 입력. (구글은 선택)
 3. **테스트용 익명 사용자 정리**: 자동 점검 중 운영 DB에 익명 사용자 몇 명과 테스트 서재 기록이 생겼음 → Supabase → Authentication → Users에서 익명(anonymous) 사용자 삭제(관련 데이터는 함께 삭제됨).

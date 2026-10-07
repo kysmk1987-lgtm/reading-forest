@@ -1,3 +1,4 @@
+import { Image } from 'expo-image';
 import { router, useLocalSearchParams } from 'expo-router';
 import { useMemo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
@@ -8,8 +9,9 @@ import { cardProgress } from '@/features/gallery/blur';
 import { captureView, makeBlurThumb, saveImage, shareImage } from '@/features/gallery/capture';
 import { CARD_FONTS, fontById, useCardFont } from '@/features/gallery/fonts';
 import { DEFAULT_DESIGN, QuoteCardView, type QuoteCardDesign } from '@/features/gallery/QuoteCardView';
-import { aspectRatio, CARD_ASPECTS, CARD_TEMPLATES, type CardAlign, type CardAspect, type CardTextSize } from '@/features/gallery/templates';
+import { aspectRatio, CARD_ASPECTS, CARD_TEMPLATES, PHOTO_TEMPLATE, PHOTO_TEMPLATE_ID, templateById, type CardAlign, type CardAspect, type CardTextSize } from '@/features/gallery/templates';
 import { isMissingSchemaError, uploadCard } from '@/features/gallery/api';
+import { pickCardPhoto } from '@/features/gallery/pickPhoto';
 import { currentPageOf, progressPercent } from '@/features/library/growth';
 import { toISODate } from '@/lib/date';
 import { useEntitlements } from '@/lib/entitlements';
@@ -67,6 +69,25 @@ export default function CardMakerScreen() {
     setDesign((d) => ({ ...d, [key]: value }));
   };
 
+  const choosePhoto = async () => {
+    if (!isPremium) {
+      showToast(t('cards.lockedPremium'));
+      return;
+    }
+    if (design.photoUri && design.template !== PHOTO_TEMPLATE_ID) {
+      setDesign((d) => ({ ...d, template: PHOTO_TEMPLATE_ID }));
+      return;
+    }
+    try {
+      const res = await pickCardPhoto();
+      if (res === 'denied') showToast(t('cards.photoDenied'));
+      else if (res !== 'cancelled') setDesign((d) => ({ ...d, template: PHOTO_TEMPLATE_ID, photoUri: res.uri }));
+    } catch (err) {
+      console.warn('[card photo]', err);
+      showToast(t('cards.photoFailed'));
+    }
+  };
+
   const capture = async () => {
     const font = fontById(design.font);
     return captureView(cardRef, { width: previewWidth, height: previewHeight, targetWidth: 1080, fontFamilies: [font.family, 'Jua_400Regular'] });
@@ -79,6 +100,10 @@ export default function CardMakerScreen() {
     }
     if (!quote.trim()) {
       showToast(t('cards.needQuote'));
+      return false;
+    }
+    if (!isPremium && templateById(design.template).premium) {
+      showToast(t('cards.lockedPremium'));
       return false;
     }
     return true;
@@ -219,7 +244,26 @@ export default function CardMakerScreen() {
               </Pressable>
             );
           })}
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel={t('cards.templates.photo')}
+            onPress={choosePhoto}
+            style={[styles.swatch, design.template === PHOTO_TEMPLATE_ID && styles.swatchOn]}>
+            <View style={[styles.swatchColor, styles.swatchPhoto, { backgroundColor: PHOTO_TEMPLATE.bg[0], borderColor: PHOTO_TEMPLATE.bg[1] }]}>
+              {design.photoUri ? (
+                <Image source={{ uri: design.photoUri }} style={StyleSheet.absoluteFill} contentFit="cover" />
+              ) : (
+                <AppText style={styles.swatchIcon}>📷</AppText>
+              )}
+            </View>
+            <AppText variant="tiny">{isPremium ? t('cards.templates.photo') : `🔒 ${t('cards.templates.photo')}`}</AppText>
+          </Pressable>
         </View>
+        {design.template === PHOTO_TEMPLATE_ID ? (
+          <AppText variant="tiny" muted>
+            {t('cards.photoHint')}
+          </AppText>
+        ) : null}
         <AppText variant="caption" muted>
           {t('cards.font')}
         </AppText>
@@ -347,5 +391,7 @@ const styles = StyleSheet.create({
   swatchOn: { borderColor: palette.leafDeep, backgroundColor: palette.cream },
   swatchColor: { width: 44, height: 44, borderRadius: 12, borderWidth: 3, alignItems: 'flex-end', justifyContent: 'flex-end', padding: 5 },
   swatchDot: { width: 10, height: 10, borderRadius: 5 },
+  swatchPhoto: { overflow: 'hidden', alignItems: 'center', justifyContent: 'center', padding: 0 },
+  swatchIcon: { fontSize: 20, lineHeight: 26 },
   optionRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: spacing.sm, flexWrap: 'wrap' },
 });

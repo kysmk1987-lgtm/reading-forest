@@ -1,17 +1,25 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
 
+import { DEFAULT_AVATAR, type AvatarId } from '@/features/profile/avatars';
 import { persistStorage } from '@/lib/storage';
 
 export type AuthMode = 'guest' | 'anonymous' | 'kakao' | 'google' | 'email';
 
+export const FOREST_NAME_MAX = 16;
+
 interface ProfileState {
   nickname: string;
+  /** Custom title of the home forest card; empty = the default '나만의 독서 숲'. */
+  forestName: string;
+  avatar: AvatarId;
   authMode: AuthMode;
   uid: string | null;
   email: string | null;
   photoURL: string | null;
   setNickname: (nickname: string) => void;
+  setForestName: (forestName: string) => void;
+  setAvatar: (avatar: AvatarId) => void;
   setAccount: (account: { authMode: AuthMode; uid: string | null; email?: string | null; photoURL?: string | null }) => void;
 }
 
@@ -30,7 +38,11 @@ export const useProfileStore = create<ProfileState>()(
       uid: null,
       email: null,
       photoURL: null,
+      forestName: '',
+      avatar: DEFAULT_AVATAR,
       setNickname: (nickname) => set({ nickname: nickname.trim() || `숲 ${DEFAULT_SUFFIX}` }),
+      setForestName: (forestName) => set({ forestName: forestName.trim().slice(0, FOREST_NAME_MAX) }),
+      setAvatar: (avatar) => set({ avatar }),
       setAccount: ({ authMode, uid, email = null, photoURL = null }) => set({ authMode, uid, email, photoURL }),
     }),
     {

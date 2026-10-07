@@ -1,5 +1,6 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
 
+import { DEFAULT_AVATAR, isAvatarId } from '@/features/profile/avatars';
 import { getSupabase } from '@/lib/supabase';
 import { onLibraryMutation, useLibraryStore, type LibraryMutation } from '@/stores/libraryStore';
 import { useProfileStore, isDefaultNickname } from '@/stores/profileStore';
@@ -103,6 +104,31 @@ async function syncProfile(sb: SupabaseClient, userId: string) {
   if (error) throw error;
 }
 
+/** Postgres 42703 / PostgREST PGRST204: the forest_name/avatar columns (migration 0005) are not there yet. */
+function missingColumn(error: { code?: string } | null) {
+  return error?.code === '42703' || error?.code === 'PGRST204';
+}
+
+/** Forest name and avatar: the remote value wins only over a local default; otherwise the local one is written. */
+async function syncProfileLook(sb: SupabaseClient, userId: string) {
+  const { data, error: readError } = await sb.from('profiles').select('forest_name, avatar').eq('id', userId).maybeSingle();
+  if (missingColumn(readError)) return;
+  if (readError) throw readError;
+  const { forestName, avatar, setForestName, setAvatar } = useProfileStore.getState();
+  const remote = data as { forest_name: string | null; avatar: string | null } | null;
+  if (remote?.forest_name && !forestName) setForestName(remote.forest_name);
+  if (isAvatarId(remote?.avatar) && avatar === DEFAULT_AVATAR) setAvatar(remote.avatar);
+  const local = useProfileStore.getState();
+  const patch = { forest_name: local.forestName || null, avatar: local.avatar === DEFAULT_AVATAR ? null : local.avatar };
+  if (remote && remote.forest_name === patch.forest_name && remote.avatar === patch.avatar) return;
+  await writeProfileLook(sb, userId, patch);
+}
+
+async function writeProfileLook(sb: SupabaseClient, userId: string, patch: { forest_name: string | null; avatar: string | null }) {
+  const { error } = await sb.from('profiles').update(patch).eq('id', userId);
+  if (error && !missingColumn(error)) throw error;
+}
+
 export function startLibrarySync(userId: string): () => void {
   const sb = getSupabase();
   if (!sb) return () => {};
@@ -115,6 +141,7 @@ export function startLibrarySync(userId: string): () => void {
   initialSync = syncNow(userId);
   enqueue(() => initialSync!);
   syncProfile(sb, userId).catch((err) => console.warn('[sync] profile failed', err));
+  syncProfileLook(sb, userId).catch((err) => console.warn('[sync] profile look failed', err));
 
   const unsubscribe = onLibraryMutation((event: LibraryMutation) => {
     if (!active) return;
@@ -132,10 +159,15 @@ export function startLibrarySync(userId: string): () => void {
   });
 
   const unsubscribeProfile = useProfileStore.subscribe((s, prev) => {
-    if (!active || s.nickname === prev.nickname) return;
-    enqueue(async () => {
-      await sb.from('profiles').update({ nickname: s.nickname, updated_at: new Date().toISOString() }).eq('id', userId);
-    });
+    if (!active) return;
+    if (s.nickname !== prev.nickname) {
+      enqueue(async () => {
+        await sb.from('profiles').update({ nickname: s.nickname, updated_at: new Date().toISOString() }).eq('id', userId);
+      });
+    }
+    if (s.forestName !== prev.forestName || s.avatar !== prev.avatar) {
+      enqueue(() => writeProfileLook(sb, userId, { forest_name: s.forestName || null, avatar: s.avatar === DEFAULT_AVATAR ? null : s.avatar }));
+    }
   });
 
   return () => {

@@ -1,9 +1,10 @@
+import { Image } from 'expo-image';
 import { forwardRef, memo, useId } from 'react';
 import { Platform, StyleSheet, Text, View } from 'react-native';
 import Svg, { Circle, Defs, Ellipse, G, Line, LinearGradient, Path, Rect, Stop } from 'react-native-svg';
 
 import { fontById } from './fonts';
-import { aspectRatio, templateById, type CardAlign, type CardDecor, type CardTextSize } from './templates';
+import { aspectRatio, PHOTO_TEMPLATE_ID, templateById, type CardAlign, type CardDecor, type CardTextSize } from './templates';
 
 export interface QuoteCardDesign {
   template: string;
@@ -12,6 +13,8 @@ export interface QuoteCardDesign {
   align: CardAlign;
   size: CardTextSize;
   showFooter: boolean;
+  /** Local/data URI of the user's photo, used when `template` is `'photo'`. */
+  photoUri?: string | null;
 }
 
 export const DEFAULT_DESIGN: QuoteCardDesign = { template: 'paper', font: 'myeongjo', aspect: 'story', align: 'center', size: 'm', showFooter: true };
@@ -119,6 +122,9 @@ export const QuoteCardView = forwardRef<View, QuoteCardViewProps>(function Quote
   const text = quote.trim() || placeholder || '';
   const fontSize = Math.round(width * SIZE_FACTOR[design.size] * font.scale * lengthFactor(text.length) * 10) / 10;
   const pad = width * 0.1;
+  const isPhoto = tpl.id === PHOTO_TEMPLATE_ID;
+  const photo = isPhoto ? design.photoUri : null;
+  const shadow = isPhoto ? styles.textShadow : null;
   return (
     <View ref={ref} collapsable={false} style={[styles.card, { width, height, backgroundColor: tpl.bg[1] }]}>
       <Svg width={width} height={height} style={StyleSheet.absoluteFill}>
@@ -133,14 +139,17 @@ export const QuoteCardView = forwardRef<View, QuoteCardViewProps>(function Quote
           </LinearGradient>
         </Defs>
         <Rect x={0} y={0} width={width} height={height} fill={`url(#bg-${gid})`} />
-        <Decor decor={tpl.id} w={width} h={height} accent={tpl.accent} gid={gid} />
+        {tpl.id !== PHOTO_TEMPLATE_ID ? <Decor decor={tpl.id} w={width} h={height} accent={tpl.accent} gid={gid} /> : null}
       </Svg>
+      {photo ? <Image source={{ uri: photo }} style={StyleSheet.absoluteFill} contentFit="cover" transition={0} cachePolicy="none" /> : null}
+      {isPhoto ? <View style={styles.photoVeil} /> : null}
       <View style={[styles.body, { paddingHorizontal: pad, paddingTop: pad * 1.2, paddingBottom: pad * 0.6 }]}>
-        <Text style={[styles.mark, { color: tpl.accent, fontSize: width * 0.14, textAlign: design.align }]}>“</Text>
+        <Text style={[styles.mark, shadow, { color: tpl.accent, fontSize: width * 0.14, textAlign: design.align }]}>“</Text>
         <Text
           style={[
             styles.quote,
             webWrap,
+            shadow,
             {
               fontFamily: font.family,
               fontSize,
@@ -154,18 +163,18 @@ export const QuoteCardView = forwardRef<View, QuoteCardViewProps>(function Quote
         {design.showFooter ? (
           <View style={[styles.footer, { alignItems: design.align === 'center' ? 'center' : design.align === 'left' ? 'flex-start' : 'flex-end' }]}>
             <View style={[styles.rule, { backgroundColor: tpl.accent }]} />
-            <Text numberOfLines={2} style={[styles.book, { color: tpl.text, fontFamily: font.family, fontSize: width * 0.042 * font.scale, textAlign: design.align }]}>
+            <Text numberOfLines={2} style={[styles.book, shadow, { color: tpl.text, fontFamily: font.family, fontSize: width * 0.042 * font.scale, textAlign: design.align }]}>
               『{bookTitle}』
             </Text>
             {author ? (
-              <Text numberOfLines={1} style={[styles.author, { color: tpl.sub, fontFamily: font.family, fontSize: width * 0.036 * font.scale, textAlign: design.align }]}>
+              <Text numberOfLines={1} style={[styles.author, shadow, { color: tpl.sub, fontFamily: font.family, fontSize: width * 0.036 * font.scale, textAlign: design.align }]}>
                 {author}
               </Text>
             ) : null}
           </View>
         ) : null}
       </View>
-      <Text style={[styles.watermark, { color: tpl.sub, fontSize: Math.max(9, width * 0.028) }]}>🌳 독서의숲</Text>
+      <Text style={[styles.watermark, shadow, { color: tpl.sub, fontSize: Math.max(9, width * 0.028) }]}>🌳 독서의숲</Text>
     </View>
   );
 });
@@ -182,4 +191,9 @@ const styles = StyleSheet.create({
   book: {},
   author: {},
   watermark: { position: 'absolute', right: 14, bottom: 10, fontFamily: 'Jua_400Regular', opacity: 0.75 },
+  photoVeil: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(20,18,26,0.42)' },
+  textShadow: Platform.select({
+    web: { textShadow: '0px 1px 6px rgba(0,0,0,0.55)' } as object,
+    default: { textShadowColor: 'rgba(0,0,0,0.55)', textShadowOffset: { width: 0, height: 1 }, textShadowRadius: 6 },
+  }),
 });

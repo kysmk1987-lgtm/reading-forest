@@ -1,6 +1,7 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
 
+import { DEFAULT_CRITTER, type Critter } from '@/features/forest/critters';
 import type { Weather } from '@/features/forest/WeatherLayer';
 import { persistStorage } from '@/lib/storage';
 
@@ -19,9 +20,13 @@ interface ForestState {
   /** Local/demo watering counters keyed by forest id. */
   waterings: Record<string, LocalWatering>;
   setWeather: (weather: Weather) => void;
+  /** Little creatures wandering at the front of the garden. */
+  critter: Critter;
+  setCritter: (critter: Critter) => void;
   /** Extra rows/columns of empty land the reader added (땅 넓히기). */
   gardenExtra: number;
   expandGarden: () => void;
+  setGardenExtra: (extra: number) => void;
   /** Records a local watering; returns false if this forest was already watered on `day`. */
   waterLocal: (forestId: string, day: string) => boolean;
 }
@@ -35,8 +40,11 @@ export const useForestStore = create<ForestState>()(
       weather: 'clear',
       waterings: {},
       setWeather: (weather) => set({ weather }),
+      critter: DEFAULT_CRITTER,
+      setCritter: (critter) => set({ critter }),
       gardenExtra: 0,
       expandGarden: () => set((s) => ({ gardenExtra: Math.min(6, s.gardenExtra + 1) })),
+      setGardenExtra: (extra) => set({ gardenExtra: Math.min(6, Math.max(0, extra)) }),
       waterLocal: (forestId, day) => {
         const current = get().waterings[forestId] ?? { count: 0 };
         if (current.lastDay === day) return false;
