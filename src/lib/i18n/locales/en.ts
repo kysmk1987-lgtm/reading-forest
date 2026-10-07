@@ -749,6 +749,8 @@ const en: TranslationResources = {
       signupDisabled: 'New sign-ups are closed right now',
       providerDisabled: '{{provider}} sign-in is coming soon. Please use another option',
       providerEmail: 'We did not receive an email from {{provider}}. Allow email sharing or use another option',
+      emailSendFailed: 'We could not send the email. Please try again later',
+      serverError: 'The server had a problem. Please try again later',
       network: 'Check your internet connection and try again',
       sessionMissing: 'Your sign-in expired. Please start again',
       notConfigured: 'Dev mode without a server',

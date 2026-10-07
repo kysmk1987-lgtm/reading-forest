@@ -232,7 +232,7 @@ export function useAuthActions() {
       return await fn();
     } catch (err) {
       const failure = classifyAuthError(err);
-      if (failure === 'unknown') console.warn('[auth]', err);
+      if (failure === 'unknown' || failure === 'serverError' || failure === 'emailSendFailed') console.warn('[auth]', err);
       return onError(failure);
     } finally {
       setPending(null);

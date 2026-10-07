@@ -98,6 +98,10 @@ export type AuthFailure =
   | 'providerDisabled'
   /** OAuth provider gave no e-mail (typical for Kakao without a business-verified app). */
   | 'providerEmail'
+  /** Supabase could not hand the mail to its sender (SMTP / template trouble): "Error sending recovery email". */
+  | 'emailSendFailed'
+  /** The auth server answered with a 5xx; the request reached it, so this is not the user's connection. */
+  | 'serverError'
   | 'network'
   | 'sessionMissing'
   | 'notConfigured'
@@ -109,9 +113,14 @@ export function classifyAuthError(error: unknown): AuthFailure {
   const e = error as { code?: string; name?: string; status?: number; message?: string };
   const code = e.code ?? '';
   const message = (e.message ?? '').toLowerCase();
-  if (e.name === 'AuthRetryableFetchError' || e.status === 0 || message.includes('failed to fetch') || message.includes('network request failed')) {
+  const status = typeof e.status === 'number' ? e.status : undefined;
+  // auth-js also throws AuthRetryableFetchError for 5xx answers, so only a missing response counts as offline.
+  const serverAnswered = status !== undefined && status >= 500;
+  if (!serverAnswered && (e.name === 'AuthRetryableFetchError' || status === 0 || message.includes('failed to fetch') || message.includes('network request failed'))) {
     return 'network';
   }
+  if (/error sending .*email/.test(message) || /email.* (could not|couldn't) be sent/.test(message)) return 'emailSendFailed';
+  if (serverAnswered || code === 'unexpected_failure') return 'serverError';
   switch (code) {
     case 'invalid_credentials':
       return 'invalidCredentials';

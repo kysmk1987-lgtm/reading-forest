@@ -82,6 +82,13 @@ assert.equal(signUpResponseKind({ user: { identities: [{ id: 'x' }] }, session: 
 assert.equal(signUpResponseKind({ user: {}, session: null }), 'needsConfirmation');
 assert.equal(classifyAuthError({ name: 'AuthRetryableFetchError', message: 'Failed to fetch', status: 0 }), 'network');
 assert.equal(classifyAuthError(new TypeError('Failed to fetch')), 'network');
+assert.equal(classifyAuthError({ name: 'AuthRetryableFetchError', message: 'Network request failed' }), 'network');
+// auth-js turns every 5xx into AuthRetryableFetchError(status 500…): the server answered, so it is not the connection
+assert.equal(classifyAuthError({ name: 'AuthRetryableFetchError', message: 'Error sending recovery email', status: 500 }), 'emailSendFailed');
+assert.equal(classifyAuthError({ name: 'AuthRetryableFetchError', message: 'Error sending confirmation email', status: 500 }), 'emailSendFailed');
+assert.equal(classifyAuthError({ name: 'AuthApiError', code: 'unexpected_failure', message: 'Error sending recovery email', status: 500 }), 'emailSendFailed');
+assert.equal(classifyAuthError({ name: 'AuthRetryableFetchError', message: 'HTTP 503', status: 503 }), 'serverError');
+assert.equal(classifyAuthError({ name: 'AuthApiError', code: 'unexpected_failure', message: 'Unexpected failure', status: 500 }), 'serverError');
 assert.equal(classifyAuthError({ message: 'Unsupported provider: provider is not enabled', status: 400 }), 'providerDisabled');
 assert.equal(classifyAuthError({ code: 'weak_password' }), 'weakPassword');
 assert.equal(classifyAuthError({ code: 'flow_state_expired' }), 'sessionMissing');

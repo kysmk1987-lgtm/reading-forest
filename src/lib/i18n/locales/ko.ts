@@ -746,6 +746,8 @@ const ko = {
       signupDisabled: '지금은 새로 가입할 수 없어요',
       providerDisabled: '{{provider}} 로그인은 준비 중이에요. 다른 방법으로 시작해 주세요',
       providerEmail: '{{provider}} 계정에서 이메일을 받지 못했어요. 이메일 제공에 동의했는지 확인하거나 다른 방법으로 시작해 주세요',
+      emailSendFailed: '메일을 보내지 못했어요. 잠시 후 다시 시도해 주세요',
+      serverError: '서버에 잠시 문제가 생겼어요. 잠시 후 다시 시도해 주세요',
       network: '인터넷 연결을 확인하고 다시 시도해 주세요',
       sessionMissing: '로그인 정보가 만료됐어요. 처음부터 다시 시도해 주세요',
       notConfigured: '서버가 연결되지 않은 개발 모드예요',
