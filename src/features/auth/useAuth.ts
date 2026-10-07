@@ -1,21 +1,35 @@
-import type { Session } from '@supabase/supabase-js';
+import type { AuthChangeEvent, Session } from '@supabase/supabase-js';
 import * as Linking from 'expo-linking';
 import * as WebBrowser from 'expo-web-browser';
 import { useCallback, useEffect, useState } from 'react';
 import { Platform } from 'react-native';
 
 import { startLibrarySync } from '@/features/library/cloudSync';
-import { getSupabase, isSupabaseConfigured } from '@/lib/supabase';
+import { fetchAuthSettings, getSupabase, isSupabaseConfigured } from '@/lib/supabase';
+import { useCardsStore } from '@/stores/cardsStore';
+import { useLibraryStore } from '@/stores/libraryStore';
 import { isDefaultNickname, useProfileStore, type AuthMode } from '@/stores/profileStore';
+
+import {
+  authPrefsHydrated,
+  isAuthGateEnabled,
+  isSessionAlive,
+  markSessionAlive,
+  rememberOAuthProvider,
+  useAuthPrefs,
+  useAuthStore,
+} from './authStore';
+import { LEGAL_VERSION } from './legal';
+import { classifyAuthError, normalizeEmail, type AuthFailure } from './validation';
 
 WebBrowser.maybeCompleteAuthSession();
 
 export type OAuthProvider = 'kakao' | 'google';
 
-/** Where OAuth providers send the user back to (must be listed in Supabase → Authentication → URL Configuration). */
-export function authRedirectUrl() {
-  if (Platform.OS === 'web' && typeof window !== 'undefined') return `${window.location.origin}/auth/callback`;
-  return Linking.createURL('auth/callback');
+/** Where Supabase sends the user back to (must be listed in Supabase → Authentication → URL Configuration). */
+export function authRedirectUrl(path: 'auth/callback' | 'auth/reset' = 'auth/callback') {
+  if (Platform.OS === 'web' && typeof window !== 'undefined') return `${window.location.origin}/${path}`;
+  return Linking.createURL(path);
 }
 
 function authModeOf(session: Session): AuthMode {
@@ -42,38 +56,100 @@ function applySession(session: Session | null) {
   if (displayName && isDefaultNickname(nickname)) setNickname(displayName);
 }
 
-/** Mount once at the root: keeps the profile store + library sync in step with Supabase Auth (no-op when not configured). */
+/**
+ * On-device records follow the account: guest / anonymous data (no owner) carries over into the account that signs in;
+ * another account's data is dropped locally first (it is already on the server) so it never leaks into this account.
+ */
+function claimLocalData(uid: string) {
+  const profile = useProfileStore.getState();
+  if (profile.dataOwner === uid) return;
+  if (profile.dataOwner) {
+    useLibraryStore.getState().clearLocal();
+    useCardsStore.getState().clearLocal();
+    profile.resetIdentity();
+  }
+  profile.setDataOwner(uid);
+}
+
+function onAuthRoute() {
+  return Platform.OS === 'web' && typeof window !== 'undefined' && window.location.pathname.startsWith('/auth/');
+}
+
+/** Mount once at the root: keeps the gate status, profile store and library sync in step with Supabase Auth. */
 export function useAuthListener() {
   useEffect(() => {
     const sb = getSupabase();
     if (!sb) return;
     let syncedUser: string | null = null;
     let stopSync: (() => void) | null = null;
-    const { data } = sb.auth.onAuthStateChange((_event, session) => {
-      // Supabase warns against awaiting other client calls inside this callback; defer the work.
+    let chain = Promise.resolve();
+    const auth = useAuthStore.getState();
+
+    // A slow token refresh must not leave the splash up forever; a late session flips the gate back.
+    const fallback = setTimeout(() => {
+      if (useAuthStore.getState().status === 'loading') auth.set({ status: 'signedOut' });
+    }, 8000);
+
+    const handle = async (event: AuthChangeEvent, session: Session | null) => {
+      if (event === 'PASSWORD_RECOVERY') {
+        markSessionAlive();
+        auth.set({ recovering: true });
+      }
+      const permanent = !!session && !session.user.is_anonymous;
+      if (event === 'INITIAL_SESSION' && permanent && isAuthGateEnabled && !onAuthRoute()) {
+        await authPrefsHydrated();
+        if (!useAuthPrefs.getState().autoLogin && !isSessionAlive()) {
+          await sb.auth.signOut({ scope: 'local' });
+          return; // SIGNED_OUT follows.
+        }
+      }
+      if (permanent) claimLocalData(session.user.id);
+      applySession(session);
+      const allowed = permanent || (!!session && !isAuthGateEnabled);
+      clearTimeout(fallback);
+      auth.set({
+        status: allowed ? 'signedIn' : 'signedOut',
+        hasAnonymousSession: !!session?.user.is_anonymous,
+        ...(event === 'SIGNED_OUT' ? { recovering: false } : null),
+      });
+      const uid = allowed ? session!.user.id : null;
+      if (uid === syncedUser) return;
+      stopSync?.();
+      stopSync = uid ? startLibrarySync(uid) : null;
+      syncedUser = uid;
+    };
+
+    const { data } = sb.auth.onAuthStateChange((event, session) => {
+      // Supabase warns against awaiting other client calls inside this callback; defer and serialize the work.
       setTimeout(() => {
-        applySession(session);
-        const uid = session?.user.id ?? null;
-        if (uid === syncedUser) return;
-        stopSync?.();
-        stopSync = uid ? startLibrarySync(uid) : null;
-        syncedUser = uid;
+        chain = chain.then(() => handle(event, session)).catch((err) => console.warn('[auth]', err));
       }, 0);
     });
     return () => {
+      clearTimeout(fallback);
       stopSync?.();
       data.subscription.unsubscribe();
     };
   }, []);
 }
 
-export type AuthErrorCode = 'not-configured' | 'cancelled' | 'failed';
+/** `null` = success. */
+export type AuthOutcome = AuthFailure | 'cancelled' | null;
 
-async function signInWithProvider(provider: OAuthProvider): Promise<AuthErrorCode | null> {
+async function providerDisabled(provider: OAuthProvider) {
+  const settings = await fetchAuthSettings();
+  return settings?.external?.[provider] === false;
+}
+
+async function signInWithProvider(provider: OAuthProvider): Promise<AuthOutcome> {
   const sb = getSupabase();
-  if (!sb) return 'not-configured';
+  if (!sb) return 'notConfigured';
+  // Without this check the browser would land on Supabase's raw JSON error page.
+  if (await providerDisabled(provider)) return 'providerDisabled';
+  markSessionAlive();
   const redirectTo = authRedirectUrl();
   if (Platform.OS === 'web') {
+    rememberOAuthProvider(provider);
     const { error } = await sb.auth.signInWithOAuth({ provider, options: { redirectTo } });
     if (error) throw error;
     return null; // The browser navigates away and comes back to /auth/callback.
@@ -84,13 +160,21 @@ async function signInWithProvider(provider: OAuthProvider): Promise<AuthErrorCod
   if (result.type !== 'success') return 'cancelled';
   const { queryParams } = Linking.parse(result.url);
   const code = typeof queryParams?.code === 'string' ? queryParams.code : null;
-  if (!code) return 'failed';
+  if (!code) return oauthFailure(queryParams ?? {});
   const exchange = await sb.auth.exchangeCodeForSession(code);
   if (exchange.error) throw exchange.error;
   return null;
 }
 
-/** Signs in anonymously if needed and returns the current user id (for sharing / watering). */
+/** Error query params Supabase appends to the redirect URL after a failed OAuth round trip. */
+export function oauthFailure(params: Record<string, unknown>): AuthOutcome {
+  const description = String(params.error_description ?? '').toLowerCase();
+  if (description.includes('email')) return 'providerEmail';
+  const failure = classifyAuthError({ code: String(params.error_code ?? ''), message: description });
+  return failure === 'unknown' && params.error === 'access_denied' ? 'cancelled' : failure;
+}
+
+/** Signs in anonymously if needed and returns the current user id (sharing / watering / reviews / gallery). */
 export async function ensureSession(): Promise<string | null> {
   const sb = getSupabase();
   if (!sb) return null;
@@ -101,42 +185,151 @@ export async function ensureSession(): Promise<string | null> {
   return res.data.user?.id ?? null;
 }
 
+export interface SignUpResult {
+  failure: AuthOutcome;
+  /** Supabase has e-mail confirmation on: no session yet, a confirmation mail was sent. */
+  needsConfirmation?: boolean;
+}
+
+type Pending = 'kakao' | 'google' | 'email' | 'signUp' | 'resend' | 'reset' | 'password' | 'signOut';
+
 export function useAuthActions() {
-  const [pending, setPending] = useState<null | 'kakao' | 'google' | 'anonymous' | 'signOut'>(null);
+  const [pending, setPending] = useState<Pending | null>(null);
 
-  const run = useCallback(
-    async (kind: NonNullable<typeof pending>, fn: () => Promise<AuthErrorCode | null | void>): Promise<AuthErrorCode | null> => {
-      if (!isSupabaseConfigured) return 'not-configured';
-      setPending(kind);
-      try {
-        return (await fn()) ?? null;
-      } catch (err) {
-        console.warn('[auth]', err);
-        return 'failed';
-      } finally {
-        setPending(null);
-      }
-    },
-    [],
-  );
+  const run = useCallback(async <T,>(kind: Pending, fn: () => Promise<T>, onError: (failure: AuthFailure) => T): Promise<T> => {
+    if (!isSupabaseConfigured) return onError('notConfigured');
+    setPending(kind);
+    try {
+      return await fn();
+    } catch (err) {
+      const failure = classifyAuthError(err);
+      if (failure === 'unknown') console.warn('[auth]', err);
+      return onError(failure);
+    } finally {
+      setPending(null);
+    }
+  }, []);
 
-  const signInKakao = useCallback(() => run('kakao', () => signInWithProvider('kakao')), [run]);
-  const signInGoogle = useCallback(() => run('google', () => signInWithProvider('google')), [run]);
-  const signInAnon = useCallback(
-    () =>
-      run('anonymous', async () => {
-        await ensureSession();
-      }),
+  const asOutcome = (failure: AuthFailure): AuthOutcome => failure;
+
+  const signInKakao = useCallback(() => run('kakao', () => signInWithProvider('kakao'), asOutcome), [run]);
+  const signInGoogle = useCallback(() => run('google', () => signInWithProvider('google'), asOutcome), [run]);
+
+  const signInWithEmail = useCallback(
+    (email: string, password: string) =>
+      run(
+        'email',
+        async (): Promise<AuthOutcome> => {
+          markSessionAlive();
+          const { error } = await getSupabase()!.auth.signInWithPassword({ email: normalizeEmail(email), password });
+          if (error) throw error;
+          return null;
+        },
+        asOutcome,
+      ),
     [run],
   );
+
+  const signUpWithEmail = useCallback(
+    (input: { email: string; password: string; nickname: string }) =>
+      run(
+        'signUp',
+        async (): Promise<SignUpResult> => {
+          markSessionAlive();
+          const nickname = input.nickname.trim();
+          const agreedAt = new Date().toISOString();
+          const { data, error } = await getSupabase()!.auth.signUp({
+            email: normalizeEmail(input.email),
+            password: input.password,
+            options: {
+              emailRedirectTo: authRedirectUrl(),
+              data: { nickname, terms_agreed_at: agreedAt, privacy_agreed_at: agreedAt, legal_version: LEGAL_VERSION },
+            },
+          });
+          if (error) throw error;
+          // With confirmation on, an already-registered address returns a user without identities (no mail is sent).
+          if (!data.session && data.user && data.user.identities?.length === 0) return { failure: 'userExists' };
+          const { dataOwner, setNickname } = useProfileStore.getState();
+          if (!dataOwner || dataOwner === data.user?.id) setNickname(nickname);
+          return { failure: null, needsConfirmation: !data.session };
+        },
+        (failure) => ({ failure }),
+      ),
+    [run],
+  );
+
+  const resendConfirmation = useCallback(
+    (email: string) =>
+      run(
+        'resend',
+        async (): Promise<AuthOutcome> => {
+          const { error } = await getSupabase()!.auth.resend({ type: 'signup', email: normalizeEmail(email), options: { emailRedirectTo: authRedirectUrl() } });
+          if (error) throw error;
+          return null;
+        },
+        asOutcome,
+      ),
+    [run],
+  );
+
+  const sendPasswordReset = useCallback(
+    (email: string) =>
+      run(
+        'reset',
+        async (): Promise<AuthOutcome> => {
+          const { error } = await getSupabase()!.auth.resetPasswordForEmail(normalizeEmail(email), { redirectTo: authRedirectUrl('auth/reset') });
+          if (error) throw error;
+          return null;
+        },
+        asOutcome,
+      ),
+    [run],
+  );
+
+  const updatePassword = useCallback(
+    (password: string) =>
+      run(
+        'password',
+        async (): Promise<AuthOutcome> => {
+          const { error } = await getSupabase()!.auth.updateUser({ password });
+          if (error) throw error;
+          useAuthStore.getState().set({ recovering: false });
+          return null;
+        },
+        asOutcome,
+      ),
+    [run],
+  );
+
   const signOut = useCallback(
     () =>
-      run('signOut', async () => {
-        const { error } = await getSupabase()!.auth.signOut();
-        if (error) throw error;
-      }),
+      run(
+        'signOut',
+        async (): Promise<AuthOutcome> => {
+          const sb = getSupabase()!;
+          const { error } = await sb.auth.signOut();
+          if (error) {
+            // e.g. offline: the server call failed and the session is kept — still sign out on this device.
+            console.warn('[auth] sign-out', error);
+            await sb.auth.signOut({ scope: 'local' });
+          }
+          return null;
+        },
+        asOutcome,
+      ),
     [run],
   );
 
-  return { isSupabaseConfigured, pending, signInKakao, signInGoogle, signInAnon, signOut };
+  return {
+    isSupabaseConfigured,
+    pending,
+    signInKakao,
+    signInGoogle,
+    signInWithEmail,
+    signUpWithEmail,
+    resendConfirmation,
+    sendPasswordReset,
+    updatePassword,
+    signOut,
+  };
 }

@@ -6,7 +6,7 @@ import { Pressable, StyleSheet, Switch, View } from 'react-native';
 
 import { AppText, Button, Card, Chip, Screen, SegmentedControl, showToast } from '@/components/ui';
 import { ENABLED_LOCALES, isLanguagePickerEnabled, LOCALE_LABELS } from '@/config/locale';
-import { useAuthActions, type AuthErrorCode } from '@/features/auth/useAuth';
+import { useAuthActions } from '@/features/auth/useAuth';
 import { STATUS_META } from '@/features/library/statusMeta';
 import { AvatarPortrait } from '@/features/profile/AvatarArt';
 import { effectiveAvatar } from '@/features/profile/avatars';
@@ -43,12 +43,14 @@ export default function MyScreen() {
     return c;
   }, [entriesMap]);
 
-  const handleAuthResult = (code: AuthErrorCode | null) => {
-    if (code === 'failed') notify(t('my.authError'));
-  };
-
   const accountLabel = t(`my.account.${profile.authMode}`);
-  const signedIn = profile.authMode !== 'guest' && profile.authMode !== 'anonymous';
+
+  const signOut = async () => {
+    const ok = await confirmAsync(t('my.signOut'), t('my.signOutConfirm'), t('my.signOut'), t('common.cancel'));
+    if (!ok) return;
+    const outcome = await auth.signOut();
+    if (outcome) notify(t('my.authError'));
+  };
 
   const changeVisibility = async (next: ReviewVisibility) => {
     tapFeedback();
@@ -95,41 +97,10 @@ export default function MyScreen() {
             variant="soft"
             label={t('my.signOut')}
             loading={auth.pending === 'signOut'}
-            onPress={async () => handleAuthResult(await auth.signOut())}
+            onPress={signOut}
           />
         ) : null}
       </View>
-      {auth.isSupabaseConfigured && !signedIn ? (
-        <Card style={styles.section}>
-          <AppText variant="subtitle">{t('my.loginTitle')}</AppText>
-          <AppText variant="caption" muted>
-            {profile.authMode === 'anonymous' ? t('my.anonymousHint') : t('my.loginBody')}
-          </AppText>
-          <Button
-            label={t('my.signInKakao')}
-            variant="wood"
-            fullWidth
-            loading={auth.pending === 'kakao'}
-            onPress={async () => handleAuthResult(await auth.signInKakao())}
-          />
-          <Button
-            label={t('my.signInGoogle')}
-            variant="soft"
-            fullWidth
-            loading={auth.pending === 'google'}
-            onPress={async () => handleAuthResult(await auth.signInGoogle())}
-          />
-          {profile.authMode === 'guest' ? (
-            <Button
-              label={t('my.signInAnonymous')}
-              variant="sky"
-              fullWidth
-              loading={auth.pending === 'anonymous'}
-              onPress={async () => handleAuthResult(await auth.signInAnon())}
-            />
-          ) : null}
-        </Card>
-      ) : null}
       {!auth.isSupabaseConfigured ? (
         <AppText variant="caption" muted>
           ☁️ {t('my.serverOff')} · {t('my.guestHint')}

@@ -2,9 +2,10 @@ import Ionicons from '@expo/vector-icons/Ionicons';
 import { router } from 'expo-router';
 import { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { ActivityIndicator, Linking, Pressable, StyleSheet, View } from 'react-native';
+import { ActivityIndicator, Pressable, StyleSheet, View } from 'react-native';
 
 import { BookCover } from '@/components/BookCover';
+import { StackTabBar } from '@/components/ForestTabBar';
 import { AppText, Button, EmptyState, IconButton, Input, Screen } from '@/components/ui';
 import { BookListItem } from '@/features/books/BookListItem';
 import { useBestsellers, useBookSearch } from '@/features/books/hooks';
@@ -39,7 +40,8 @@ export default function SearchScreen() {
   return (
     <Screen
       title={t('search.title')}
-      headerLeft={<IconButton name="chevron-back" accessibilityLabel={t('common.back')} onPress={back} />}>
+      headerLeft={<IconButton name="chevron-back" accessibilityLabel={t('common.back')} onPress={back} />}
+      footer={<StackTabBar />}>
       <Input
         value={text}
         onChangeText={setText}
@@ -83,29 +85,14 @@ export default function SearchScreen() {
   );
 }
 
-const shortDate = (iso: string) => iso.slice(5).replace('-', '.');
-
-/** 베스트셀러 추천 below the empty state; hidden when the list can't be loaded. */
+/** 베스트셀러 추천 below the empty state; hidden when the list can't be loaded. Shown without source attribution. */
 function Bestsellers() {
   const { t } = useTranslation();
   const best = useBestsellers();
   if (best.isError) return null;
-  const source = best.data?.source;
-  const title = source === 'kyobo' ? t('search.bestKyobo') : source === 'data4library' ? t('search.bestLibrary') : t('search.bestTitle');
-  const hint = source === 'kyobo' ? t('search.bestKyoboHint') : source === 'data4library' ? t('search.bestLibraryHint') : t('search.bestHint');
-  const period =
-    best.data?.periodStart && best.data.periodEnd
-      ? `${best.data.periodStart.slice(0, 4)}.${shortDate(best.data.periodStart)}~${shortDate(best.data.periodEnd)}`
-      : null;
-  const sourceUrl = best.data?.sourceUrl;
   return (
     <View style={styles.best} testID="bestsellers">
-      <View style={styles.bestHead}>
-        <AppText variant="subtitle">📚 {title}</AppText>
-        <AppText variant="tiny" muted>
-          {hint}
-        </AppText>
-      </View>
+      <AppText variant="subtitle">📚 {t('search.bestTitle')}</AppText>
       {best.isLoading || !best.data ? (
         <ActivityIndicator color={colors.primaryDeep} style={styles.loading} />
       ) : (
@@ -138,13 +125,6 @@ function Bestsellers() {
           ))}
         </View>
       )}
-      {source === 'kyobo' && sourceUrl ? (
-        <Pressable accessibilityRole="link" onPress={() => Linking.openURL(sourceUrl)} testID="bestsellers-source">
-          <AppText variant="tiny" muted center style={styles.sourceLink}>
-            {t('search.bestKyoboSource', { period: period ?? '' })} ↗
-          </AppText>
-        </Pressable>
-      ) : null}
     </View>
   );
 }
@@ -178,11 +158,9 @@ const styles = StyleSheet.create({
     borderWidth: 2,
     borderColor: 'rgba(255,255,255,0.8)',
   },
-  bestHead: { gap: 2 },
   grid: { flexDirection: 'row', flexWrap: 'wrap', rowGap: spacing.md },
   cell: { width: '33.33%', paddingHorizontal: 4, alignItems: 'center', gap: 4 },
   cellTitle: { minHeight: 32 },
-  sourceLink: { textDecorationLine: 'underline' },
   pressed: { opacity: 0.7 },
   rank: {
     position: 'absolute',

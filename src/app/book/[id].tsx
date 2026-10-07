@@ -5,6 +5,7 @@ import { useTranslation } from 'react-i18next';
 import { ActivityIndicator, Pressable, StyleSheet, View } from 'react-native';
 
 import { BookCover } from '@/components/BookCover';
+import { StackTabBar } from '@/components/ForestTabBar';
 import { GrowthBadge } from '@/components/GrowthBadge';
 import { AppText, Button, Card, EmptyState, IconButton, ProgressBar, Screen } from '@/components/ui';
 import { useBook } from '@/features/books/hooks';
@@ -31,7 +32,7 @@ export default function BookDetailScreen() {
 
   if (!book) {
     return (
-      <Screen title={t('book.detail')} headerLeft={header}>
+      <Screen title={t('book.detail')} headerLeft={header} footer={<StackTabBar />}>
         {isLoading ? (
           <ActivityIndicator size="large" color={colors.primaryDeep} style={styles.loading} />
         ) : (
@@ -61,7 +62,7 @@ export default function BookDetailScreen() {
     .join(' · ');
 
   return (
-    <Screen title={t('book.detail')} headerLeft={header}>
+    <Screen title={t('book.detail')} headerLeft={header} footer={<StackTabBar />}>
       <View style={styles.hero}>
         <BookCover uri={book.coverUrl} title={book.title} width={170} />
         <AppText variant="title" center>

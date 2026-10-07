@@ -2,6 +2,7 @@ import { router } from 'expo-router';
 import { useTranslation } from 'react-i18next';
 import { ScrollView, StyleSheet, View } from 'react-native';
 
+import { StackTabBar } from '@/components/ForestTabBar';
 import { AppText, Card, IconButton, Screen } from '@/components/ui';
 import { AnimatedTree } from '@/features/forest/AnimatedTree';
 import { SPECIES_IDS, TREE_SPECIES } from '@/features/forest/species';
@@ -20,7 +21,8 @@ export default function TreeGuideScreen() {
       subtitle={t('trees.subtitle')}
       headerLeft={
         <IconButton name="chevron-back" accessibilityLabel={t('common.back')} onPress={() => (router.canGoBack() ? router.back() : router.replace('/'))} />
-      }>
+      }
+      footer={<StackTabBar />}>
       <Card tint={palette.skySoft} edgeColor={palette.sky} style={styles.stagesCard}>
         <AppText variant="subtitle">{t('trees.stagesTitle')}</AppText>
         <View style={styles.stageRow}>

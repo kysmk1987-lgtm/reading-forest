@@ -7,6 +7,7 @@ import assert from 'node:assert/strict';
 
 import { cardProgress, findEntryForCard, pageToPercent, shouldBlur, viewerProgressOf } from '../src/features/gallery/blur';
 import { remainingTranslations } from '../src/features/gallery/quota';
+import { activitiesByDay, markersOf } from '../src/features/records/aggregate';
 import { bucketOf, categoryLabel, computeWrapped, isEmptyWrapped, longestStreak, wrappedBannerPeriod, type WrappedStats } from '../src/features/wrapped/compute';
 import { koreanHour, personaTagline, pickPersona, withObjectParticle } from '../src/features/wrapped/personas';
 import { sampleWrappedInput } from '../src/features/wrapped/sample';
@@ -196,6 +197,38 @@ test('sample report is a night thinker with ~42 trees a year', () => {
   assert.ok(s.booksFinished > 5 && s.pages > 1000);
   const m = computeWrapped(sampleWrappedInput({ kind: 'month', year: 2026, month: 10 }), { kind: 'month', year: 2026, month: 10 });
   assert.equal(isEmptyWrapped(m), false);
+});
+
+console.log('calendar markers');
+const calLog = (over: Partial<ReadingLog>): ReadingLog =>
+  ({ id: Math.random().toString(36), entryId: 'e1', bookId: 'b', date: '2026-10-07', kind: 'progress', pagesDelta: 0, createdAt: 0, ...over }) as ReadingLog;
+test('all mode shows start, wishlist and finish days; complete mode only finish days', () => {
+  const entries = {
+    a: entry({ id: 'a', status: 'reading', startDate: '2026-10-03' }),
+    w: entry({ id: 'w', status: 'want', createdAt: new Date(2026, 9, 5, 12).getTime() }),
+    r: entry({ id: 'r', status: 'read', startDate: '2026-10-01', endDate: '2026-10-07' }),
+  };
+  const logs = [
+    calLog({ entryId: 'a', kind: 'add', date: '2026-10-07', pagesDelta: 2 }),
+    calLog({ entryId: 'r', kind: 'complete', date: '2026-10-07', pagesDelta: 300 }),
+  ];
+  const all = activitiesByDay(logs, entries, 2026, 10, false);
+  assert.deepEqual(markersOf(all.get('2026-10-03') ?? []), ['add']);
+  assert.deepEqual(markersOf(all.get('2026-10-05') ?? []), ['want']);
+  assert.deepEqual(markersOf(all.get('2026-10-01') ?? []), ['add']);
+  const oct7 = all.get('2026-10-07') ?? [];
+  assert.deepEqual(markersOf(oct7), ['complete']);
+  assert.equal(oct7[0].entry.id, 'r');
+  assert.equal(oct7.find((x) => x.entry.id === 'a')?.kind, 'progress');
+  const done = activitiesByDay(logs, entries, 2026, 10, true);
+  assert.deepEqual([...done.keys()], ['2026-10-07']);
+  assert.deepEqual(done.get('2026-10-07')?.map((x) => x.entry.id), ['r']);
+});
+test('finish day follows an edited end date', () => {
+  const entries = { r: entry({ id: 'r', status: 'read', endDate: '2026-11-02' }) };
+  const logs = [calLog({ entryId: 'r', kind: 'complete', date: '2026-10-07' })];
+  assert.equal(activitiesByDay(logs, entries, 2026, 10, true).size, 0);
+  assert.deepEqual(markersOf(activitiesByDay(logs, entries, 2026, 11, true).get('2026-11-02') ?? []), ['complete']);
 });
 
 console.log(`\n${passed} tests passed`);

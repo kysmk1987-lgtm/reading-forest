@@ -39,7 +39,9 @@ const TREE = 94;
 const HIT_W = TREE * 0.5;
 const HIT_TOP = TREE * 0.18;
 const BUBBLE_W = 220;
-const BUBBLE_H = 118;
+const BUBBLE_H = 140;
+/** Bubble wrapper height (twice the tallest bubble). */
+const BUBBLE_ANCHOR_H = 400;
 const DRAG_SLOP = 8;
 const READER = 34;
 /** The card keeps this height at most; bigger forests are panned (drag in any direction). */
@@ -47,8 +49,18 @@ const VIEW_MAX_H = 380;
 const PAN_SLOP = 6;
 /** On web the DOM click that ends a pan still reaches the Pressable under the pointer. */
 const PAN_CLICK_GUARD_MS = 350;
-const webPan = (axes: 'x' | 'y' | 'both') =>
-  ({ cursor: 'grab', userSelect: 'none', touchAction: axes === 'both' ? 'none' : axes === 'x' ? 'pan-y' : 'pan-x' }) as unknown as ViewStyle;
+/** Pinch / ctrl+wheel zoom: up to 2.5×, down to "whole forest fits" but never below ZOOM_FLOOR. */
+const ZOOM_MAX = 2.5;
+const ZOOM_FLOOR = 0.4;
+const ZOOM_STEP = 1.25;
+const ZOOM_SETTLE_MS = 120;
+/** Browser pinch-zoom is always off over the forest (our own pinch handles it); single-finger scrolling stays where we don't pan. */
+const webPan = (axes: 'x' | 'y' | 'both' | null) =>
+  ({
+    cursor: axes ? 'grab' : undefined,
+    userSelect: 'none',
+    touchAction: axes === 'both' ? 'none' : axes === 'x' ? 'pan-y' : axes === 'y' ? 'pan-x' : 'pan-x pan-y',
+  }) as unknown as ViewStyle;
 
 export { gardenSize } from './layout';
 
@@ -87,69 +99,194 @@ type Offset = { dx: number; dy: number };
 
 const NO_CRITTERS: readonly CritterKind[] = [];
 
-/** Pan limits plus the land diamond (content coordinates: centre and half extents). */
-type PanBounds = { minX: number; minY: number; viewW: number; viewH: number; land: { cx: number; cy: number; a: number; b: number } };
+type Point = { x: number; y: number };
+type TouchPoint = { pageX: number; pageY: number };
+
+/** Viewport and (unscaled) content sizes, the zoom range floor and the land diamond (content coordinates: centre and half extents). */
+type PanBounds = {
+  viewW: number;
+  viewH: number;
+  contentW: number;
+  contentH: number;
+  minScale: number;
+  land: { cx: number; cy: number; a: number; b: number };
+};
+
+const midpoint = (p: readonly TouchPoint[]): Point =>
+  p.length >= 2 ? { x: (p[0].pageX + p[1].pageX) / 2, y: (p[0].pageY + p[1].pageY) / 2 } : { x: p[0].pageX, y: p[0].pageY };
+const spread = (p: readonly TouchPoint[]) => Math.max(1, Math.hypot(p[0].pageX - p[1].pageX, p[0].pageY - p[1].pageY));
 
 /**
- * Drag-to-look-around for a garden bigger than its viewport (mouse and touch, via the responder system).
- * The pan claims a gesture only after it moves (so taps still reach trees and tiles) and never steals a
- * tree that is being dragged in 옮겨 심기 (DraggableTree refuses to hand over its responder).
+ * Drag-to-look-around and pinch-to-zoom for the garden viewport (mouse and touch, via the responder system).
+ * One finger pans once it moves (so taps still reach trees and tiles); two fingers always zoom around their
+ * midpoint. It never steals a tree that is being dragged in 옮겨 심기 (DraggableTree refuses to hand over its responder).
+ * `at` is the content's top-left in viewport coordinates and `scale` its zoom, so screen = at + scale × content.
  */
 class GardenPan {
   readonly value = new Animated.ValueXY({ x: 0, y: 0 });
-  private at = { x: 0, y: 0 };
-  private from = { x: 0, y: 0 };
-  private bounds: PanBounds = { minX: 0, minY: 0, viewW: 0, viewH: 0, land: { cx: 0, cy: 0, a: 1, b: 1 } };
+  readonly scaleValue = new Animated.Value(1);
+  scale = 1;
+  private at: Point = { x: 0, y: 0 };
+  private bounds: PanBounds = { viewW: 0, viewH: 0, contentW: 0, contentH: 0, minScale: 1, land: { cx: 0, cy: 0, a: 1, b: 1 } };
   private endedAt = 0;
+  private gesture: { count: number; at: Point; scale: number; mid: Point; dist: number; origin: Point } | null = null;
+  private settle: ReturnType<typeof setTimeout> | undefined;
+  private locate: () => Point = () => ({ x: 0, y: 0 });
+  private onZoom: (scale: number) => void = () => {};
+
+  /**
+   * `onZoom` gets the settled zoom (React state for the bubble size, web touch-action and the zoom buttons);
+   * `locate` returns the viewport's top-left in page coordinates (the space of touch pageX/pageY).
+   */
+  attach(onZoom: (scale: number) => void, locate: () => Point) {
+    this.onZoom = onZoom;
+    this.locate = locate;
+  }
+
+  canPan(s = this.scale) {
+    const { viewW, viewH, contentW, contentH } = this.bounds;
+    return { x: contentW * s > viewW + 1, y: contentH * s > viewH + 1 };
+  }
+
+  get minScale() {
+    return this.bounds.minScale;
+  }
 
   readonly responder = PanResponder.create({
-    onMoveShouldSetPanResponderCapture: (_, g) => {
+    onMoveShouldSetPanResponderCapture: (e, g) => {
+      if (e.nativeEvent.touches.length >= 2) return true;
       const ax = Math.abs(g.dx);
       const ay = Math.abs(g.dy);
       if (Math.max(ax, ay) < PAN_SLOP) return false;
-      const canX = this.bounds.minX < -1;
-      const canY = this.bounds.minY < -1;
+      const can = this.canPan();
       // One pannable axis: leave the other direction to the page scroll.
-      return (canX && canY) || (canX && ax > ay) || (canY && ay > ax);
+      return (can.x && can.y) || (can.x && ax > ay) || (can.y && ay > ax);
     },
-    onPanResponderGrant: () => {
-      this.value.stopAnimation();
-      this.from = { ...this.at };
+    onPanResponderGrant: (e) => {
+      this.sync();
+      this.begin(this.points(e));
     },
-    onPanResponderMove: (_, g) => this.to(this.from.x + g.dx, this.from.y + g.dy),
+    onPanResponderMove: (e) => this.move(this.points(e)),
     onPanResponderTerminationRequest: () => false,
-    onPanResponderRelease: () => {
-      this.endedAt = Date.now();
-    },
-    onPanResponderTerminate: () => {
-      this.endedAt = Date.now();
-    },
+    onPanResponderRelease: () => this.end(),
+    onPanResponderTerminate: () => this.end(),
   });
 
-  resize(bounds: PanBounds) {
-    this.bounds = bounds;
-    this.to(bounds.viewW / 2 - bounds.land.cx, bounds.viewH / 2 - bounds.land.cy);
+  private points(e: GestureResponderEvent): readonly TouchPoint[] {
+    const { touches } = e.nativeEvent;
+    return touches.length ? touches : [e.nativeEvent];
   }
 
-  /** Keeps the content inside the viewport and the viewport centre over the land, so the forest never drifts out of sight. */
-  private clampPan(x: number, y: number) {
-    const { minX, minY, viewW, viewH, land } = this.bounds;
-    x = clamp(x, minX, 0);
-    y = clamp(y, minY, 0);
-    const dx = viewW / 2 - x - land.cx;
-    const dy = viewH / 2 - y - land.cy;
+  /** Stops a running reveal/zoom animation where it is on screen. */
+  private sync() {
+    const { contentW, contentH } = this.bounds;
+    let s = this.scale;
+    this.scaleValue.stopAnimation((v) => (s = v));
+    this.value.stopAnimation((v) => {
+      this.scale = s;
+      this.at = { x: v.x + (contentW / 2) * (1 - s), y: v.y + (contentH / 2) * (1 - s) };
+    });
+  }
+
+  private begin(points: readonly TouchPoint[]) {
+    const two = points.length >= 2;
+    this.gesture = {
+      count: two ? 2 : 1,
+      at: { ...this.at },
+      scale: this.scale,
+      mid: midpoint(points),
+      dist: two ? spread(points) : 1,
+      origin: two ? this.locate() : { x: 0, y: 0 },
+    };
+  }
+
+  private move(points: readonly TouchPoint[]) {
+    const g = this.gesture;
+    // A finger added or lifted: restart from here so nothing jumps.
+    if (!g || g.count !== (points.length >= 2 ? 2 : 1)) return this.begin(points);
+    const mid = midpoint(points);
+    if (g.count === 1) return this.to(g.at.x + mid.x - g.mid.x, g.at.y + mid.y - g.mid.y);
+    const s = this.clampScale((g.scale * spread(points)) / g.dist);
+    // The content point under the starting midpoint stays under the fingers.
+    const px = (g.mid.x - g.origin.x - g.at.x) / g.scale;
+    const py = (g.mid.y - g.origin.y - g.at.y) / g.scale;
+    this.to(mid.x - g.origin.x - px * s, mid.y - g.origin.y - py * s, s);
+  }
+
+  private end() {
+    const zoomed = this.gesture?.count === 2;
+    this.gesture = null;
+    this.endedAt = Date.now();
+    if (zoomed) this.notify(true);
+  }
+
+  private notify(now: boolean) {
+    clearTimeout(this.settle);
+    if (now) this.onZoom(this.scale);
+    else this.settle = setTimeout(() => this.onZoom(this.scale), ZOOM_SETTLE_MS);
+  }
+
+  private clampScale(s: number) {
+    return clamp(s, this.bounds.minScale, ZOOM_MAX);
+  }
+
+  /** New size (땅 넓히기, more trees, rotation): keep the zoom (within the new range) and start centred again. */
+  resize(bounds: PanBounds) {
+    this.bounds = bounds;
+    const s = this.clampScale(this.scale);
+    this.to(bounds.viewW / 2 - bounds.land.cx * s, bounds.viewH / 2 - bounds.land.cy * s, s);
+    this.notify(true);
+  }
+
+  /**
+   * Keeps the content inside the viewport (centred while it is smaller) and the viewport centre over the land,
+   * so the forest never drifts out of sight at any zoom.
+   */
+  private clampPan(x: number, y: number, s: number) {
+    const { viewW, viewH, contentW, contentH, land } = this.bounds;
+    const fit = (v: number, view: number, size: number) => (size <= view ? (view - size) / 2 : clamp(v, view - size, 0));
+    x = fit(x, viewW, contentW * s);
+    y = fit(y, viewH, contentH * s);
+    const dx = (viewW / 2 - x) / s - land.cx;
+    const dy = (viewH / 2 - y) / s - land.cy;
     const outside = Math.abs(dx) / land.a + Math.abs(dy) / land.b;
     if (outside > 1) {
-      x = clamp(viewW / 2 - land.cx - dx / outside, minX, 0);
-      y = clamp(viewH / 2 - land.cy - dy / outside, minY, 0);
+      x = fit(viewW / 2 - (land.cx + dx / outside) * s, viewW, contentW * s);
+      y = fit(viewH / 2 - (land.cy + dy / outside) * s, viewH, contentH * s);
     }
     return { x, y };
   }
 
-  to(x: number, y: number, animated = false) {
-    this.at = this.clampPan(x, y);
-    if (animated) Animated.timing(this.value, { toValue: this.at, duration: 260, useNativeDriver: false }).start();
-    else this.value.setValue(this.at);
+  to(x: number, y: number, s = this.scale, animated = false) {
+    this.scale = this.clampScale(s);
+    this.at = this.clampPan(x, y, this.scale);
+    const { contentW, contentH } = this.bounds;
+    // RN scales around the view centre; shift so the top-left stays the anchor.
+    const shown = { x: this.at.x - (contentW / 2) * (1 - this.scale), y: this.at.y - (contentH / 2) * (1 - this.scale) };
+    if (animated) {
+      Animated.parallel([
+        Animated.timing(this.value, { toValue: shown, duration: 220, useNativeDriver: false }),
+        Animated.timing(this.scaleValue, { toValue: this.scale, duration: 220, useNativeDriver: false }),
+      ]).start();
+    } else {
+      this.value.setValue(shown);
+      this.scaleValue.setValue(this.scale);
+    }
+  }
+
+  /** Zooms by `factor` around a viewport point (default: the viewport centre). */
+  zoomBy(factor: number, focus?: Point, animated = false) {
+    this.zoomTo(this.scale * factor, focus, animated);
+  }
+
+  zoomTo(target: number, focus?: Point, animated = false) {
+    const { viewW, viewH } = this.bounds;
+    const f = focus ?? { x: viewW / 2, y: viewH / 2 };
+    const s = this.clampScale(target);
+    const px = (f.x - this.at.x) / this.scale;
+    const py = (f.y - this.at.y) / this.scale;
+    this.to(f.x - px * s, f.y - py * s, s, animated);
+    this.notify(animated);
   }
 
   /** True right after a pan ended: on web its DOM click still reaches the Pressable under the pointer. */
@@ -160,12 +297,13 @@ class GardenPan {
   /** Pans just enough to bring a content rectangle (e.g. the book bubble) into view. */
   reveal(x0: number, y0: number, x1: number, y1: number) {
     const { viewW, viewH } = this.bounds;
+    const s = this.scale;
     let { x, y } = this.at;
-    if (x0 + x < 4) x = 4 - x0;
-    else if (x1 + x > viewW - 4) x = viewW - 4 - x1;
-    if (y0 + y < 4) y = 4 - y0;
-    else if (y1 + y > viewH - 4) y = viewH - 4 - y1;
-    if (x !== this.at.x || y !== this.at.y) this.to(x, y, true);
+    if (x0 * s + x < 4) x = 4 - x0 * s;
+    else if (x1 * s + x > viewW - 4) x = viewW - 4 - x1 * s;
+    if (y0 * s + y < 4) y = 4 - y0 * s;
+    else if (y1 * s + y > viewH - 4) y = viewH - 4 - y1 * s;
+    if (x !== this.at.x || y !== this.at.y) this.to(x, y, s, true);
   }
 }
 
@@ -253,18 +391,80 @@ export function ForestGarden({
   const H = HEAD + n * TH + DEPTH + 6;
   const tileTop = (c: number, r: number) => ({ x: W / 2 + ((c - r) * TW) / 2, y: HEAD + ((c + r) * TH) / 2 });
 
-  // ─── Panning: the garden moves inside a fixed viewport once it outgrows it ───
+  // ─── Panning and zoom: the garden moves and scales inside a fixed viewport ───
   const groundW = Math.max(W, viewportW);
   const viewH = Math.min(H, VIEW_MAX_H);
-  const minX = Math.min(0, viewportW - groundW);
-  const minY = Math.min(0, viewH - H);
-  const panAxes = minX < -1 && minY < -1 ? 'both' : minX < -1 ? 'x' : minY < -1 ? 'y' : null;
+  const minScale = viewportW > 0 ? Math.min(1, Math.max(ZOOM_FLOOR, Math.min(viewportW / W, viewH / H))) : 1;
   const [pan] = useState(() => new GardenPan());
+  /** Settled zoom (the live value is animated without re-rendering). */
+  const [zoom, setZoom] = useState(1);
+  const viewRef = useRef<View>(null);
+  const canX = groundW * zoom > viewportW + 1;
+  const canY = H * zoom > viewH + 1;
+  const panAxes = canX && canY ? 'both' : canX ? 'x' : canY ? 'y' : null;
+  useEffect(() => {
+    let origin = { x: 0, y: 0 };
+    pan.attach(setZoom, () => {
+      const node = viewRef.current;
+      if (!node) return origin;
+      if (Platform.OS === 'web') {
+        const rect = (node as unknown as HTMLElement).getBoundingClientRect();
+        return { x: rect.left + window.scrollX, y: rect.top + window.scrollY };
+      }
+      // Synchronous on the new architecture; otherwise the last measurement is used.
+      node.measure((_x, _y, _w, _h, pageX, pageY) => (origin = { x: pageX, y: pageY }));
+      return origin;
+    });
+  }, [pan]);
   // New size (땅 넓히기, more trees, rotation): start centred again.
   useEffect(
-    () => pan.resize({ minX, minY, viewW: viewportW, viewH, land: { cx: groundW / 2, cy: HEAD + (n * TH) / 2, a: W / 2, b: (n * TH) / 2 } }),
-    [pan, minX, minY, viewportW, viewH, groundW, n, W],
+    () =>
+      pan.resize({
+        viewW: viewportW,
+        viewH,
+        contentW: groundW,
+        contentH: H,
+        minScale,
+        // A tree's height (and its book bubble) of slack around the diamond, so zoomed-in edge trees stay reachable.
+        land: { cx: groundW / 2, cy: HEAD + (n * TH) / 2, a: W / 2 + TW, b: (n * TH) / 2 + HEAD },
+      }),
+    [pan, viewportW, viewH, groundW, H, minScale, n, W],
   );
+  // Web: ctrl/⌘ + wheel and trackpad pinch zoom (a plain wheel keeps scrolling the page); Safari sends gesture events.
+  useEffect(() => {
+    const node = viewRef.current as unknown as HTMLElement | null;
+    if (Platform.OS !== 'web' || !node?.addEventListener) return;
+    const focus = (e: { clientX: number; clientY: number }) => {
+      const rect = node.getBoundingClientRect();
+      return { x: e.clientX - rect.left, y: e.clientY - rect.top };
+    };
+    const onWheel = (e: WheelEvent) => {
+      if (!e.ctrlKey && !e.metaKey) return;
+      e.preventDefault();
+      const delta = clamp(e.deltaY * (e.deltaMode === 1 ? 16 : 1), -60, 60);
+      pan.zoomBy(Math.exp(-delta * 0.01), focus(e));
+    };
+    let gestureFrom = 1;
+    const touchScreen = 'ontouchstart' in window;
+    const onGestureStart = (e: Event) => {
+      e.preventDefault();
+      gestureFrom = pan.scale;
+    };
+    // On touch screens the responder pinch already handles it (Safari also fires these alongside touches).
+    const onGestureChange = (e: Event) => {
+      e.preventDefault();
+      const g = e as Event & { scale?: number; clientX: number; clientY: number };
+      if (!touchScreen && g.scale) pan.zoomTo(gestureFrom * g.scale, focus(g));
+    };
+    node.addEventListener('wheel', onWheel, { passive: false });
+    node.addEventListener('gesturestart', onGestureStart);
+    node.addEventListener('gesturechange', onGestureChange);
+    return () => {
+      node.removeEventListener('wheel', onWheel);
+      node.removeEventListener('gesturestart', onGestureStart);
+      node.removeEventListener('gesturechange', onGestureChange);
+    };
+  }, [pan]);
 
   const placed = useMemo(
     () =>
@@ -289,6 +489,8 @@ export function ForestGarden({
     }
     return best?.id ?? null;
   }, [placed, avatar]);
+  /** Finger movement on screen → movement in garden coordinates. */
+  const unzoom = (o: Offset): Offset => ({ dx: o.dx / pan.scale, dy: o.dy / pan.scale });
   const dropTile = (from: Tile, o: Offset) => {
     const { x, y } = tileTop(from.c, from.r);
     return tileAt(x + o.dx, y + TH / 2 + o.dy, n, { tw: TW, th: TH, head: HEAD });
@@ -313,11 +515,18 @@ export function ForestGarden({
   const onLayout = (e: LayoutChangeEvent) => setViewportW(e.nativeEvent.layout.width);
 
   const offsetX = (groundW - W) / 2;
-  /** Book bubble above the tree on tile (c, r), kept inside the garden. */
+  /**
+   * Book bubble above the tree on tile (c, r), kept inside the garden: its bottom-centre anchor and its box
+   * in garden coordinates. The bubble keeps its on-screen size at any zoom (counter-scaled by 1 / zoom).
+   */
   const bubbleBox = (c: number, r: number) => {
     const { x, y } = tileTop(c, r);
     const treeTop = y + TH / 2 - TREE * 0.92 + HIT_TOP;
-    return { left: Math.min(Math.max(4, offsetX + x - BUBBLE_W / 2), groundW - BUBBLE_W - 4), top: Math.max(2, treeTop - BUBBLE_H) };
+    const halfW = BUBBLE_W / 2 / zoom;
+    const h = BUBBLE_H / zoom;
+    const ax = Math.min(Math.max(4 + halfW, offsetX + x), groundW - 4 - halfW);
+    const ay = Math.max(2 + h, treeTop);
+    return { ax, ay, left: ax - halfW, top: ay - h, right: ax + halfW };
   };
   const bottomY = HEAD + n * TH;
   const midY = HEAD + (n * TH) / 2;
@@ -449,10 +658,10 @@ export function ForestGarden({
                 tapFeedback();
                 setMovingId(moving?.tree.id === tree.id ? null : tree.id);
               }}
-              onDrag={(o) => setDrag(o ? { id: tree.id, ...o } : null)}
+              onDrag={(o) => setDrag(o ? { id: tree.id, ...unzoom(o) } : null)}
               onDrop={(o) => {
                 lastTreeGesture.current = Date.now();
-                const target = dropTile({ c, r }, o);
+                const target = dropTile({ c, r }, unzoom(o));
                 if (target) plant(tree.id, target);
                 else setDrag(null);
               }}>
@@ -474,7 +683,7 @@ export function ForestGarden({
                 }
                 setSelection({ id: tree.id, species: tree.species });
                 const box = bubbleBox(c, r);
-                pan.reveal(box.left, box.top, box.left + BUBBLE_W, y + TH);
+                pan.reveal(box.left, box.top, box.right, y + TH);
               }}
               style={hitStyle}>
               {art}
@@ -526,11 +735,12 @@ export function ForestGarden({
 
       {selected
         ? (() => {
-            const { left, top } = bubbleBox(selected.c, selected.r);
+            const { ax, ay } = bubbleBox(selected.c, selected.r);
             const tree = selected.tree;
             return (
+              <View style={[styles.bubbleAnchor, { left: ax - BUBBLE_W, top: ay - BUBBLE_ANCHOR_H / 2, transform: [{ scale: 1 / zoom }] }]}>
               <View
-                style={[styles.bubble, { left, top }]}
+                style={styles.bubble}
                 onStartShouldSetResponder={() => true}>
                 <View style={styles.bubbleRow}>
                   <BookCover uri={tree.coverUrl} title={tree.title} width={42} />
@@ -573,6 +783,7 @@ export function ForestGarden({
                   ) : null}
                 </View>
               </View>
+              </View>
             );
           })()
         : null}
@@ -581,11 +792,18 @@ export function ForestGarden({
 
   return (
     <View
+      ref={viewRef}
       onLayout={onLayout}
-      style={[styles.viewport, { height: viewH }, panAxes && Platform.OS === 'web' ? webPan(panAxes) : null]}
-      {...(panAxes ? pan.responder.panHandlers : null)}>
+      style={[styles.viewport, { height: viewH }, Platform.OS === 'web' ? webPan(panAxes) : null]}
+      {...pan.responder.panHandlers}>
       {viewportW > 0 ? (
-        <Animated.View style={[styles.content, { width: groundW, height: H, transform: pan.value.getTranslateTransform() }]}>{garden}</Animated.View>
+        <Animated.View
+          style={[
+            styles.content,
+            { width: groundW, height: H, transform: [...pan.value.getTranslateTransform(), { scale: pan.scaleValue }] },
+          ]}>
+          {garden}
+        </Animated.View>
       ) : null}
 
       {weather !== 'clear' && viewportW > 0 ? <WeatherLayer kind={weather} width={viewportW} height={viewH} /> : null}
@@ -595,6 +813,28 @@ export function ForestGarden({
           <AppText variant="caption" center>
             {hint}
           </AppText>
+        </View>
+      ) : null}
+
+      {Platform.OS === 'web' && viewportW > 0 ? (
+        <View style={styles.zoomButtons}>
+          {(
+            [
+              { label: '+', a11y: t('forest.zoomIn'), factor: ZOOM_STEP, off: zoom >= ZOOM_MAX - 0.01 },
+              { label: '−', a11y: t('forest.zoomOut'), factor: 1 / ZOOM_STEP, off: zoom <= minScale + 0.01 },
+            ] as const
+          ).map((b) => (
+            <Pressable
+              key={b.label}
+              accessibilityRole="button"
+              accessibilityLabel={b.a11y}
+              accessibilityState={{ disabled: b.off }}
+              disabled={b.off}
+              onPress={() => pan.zoomBy(b.factor, undefined, true)}
+              style={({ pressed }) => [styles.zoomButton, b.off && styles.zoomOff, pressed && styles.zoomPressed]}>
+              <AppText style={styles.zoomLabel}>{b.label}</AppText>
+            </Pressable>
+          ))}
         </View>
       ) : null}
     </View>
@@ -622,8 +862,27 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(255,253,246,0.9)',
   },
   hint: { zIndex: 25, borderWidth: 1.5, borderColor: palette.yellowDeep },
+  zoomButtons: { position: 'absolute', right: 8, bottom: 8, gap: 6, zIndex: 26 },
+  zoomButton: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: 'rgba(255,253,246,0.92)',
+    borderWidth: 1.5,
+    borderColor: colors.border,
+    borderBottomWidth: 3,
+  },
+  zoomOff: { opacity: 0.45 },
+  zoomPressed: { transform: [{ translateY: 1 }], borderBottomWidth: 2 },
+  zoomLabel: { fontSize: 18, lineHeight: 20, color: colors.text },
+  /** Centred on the bubble's bottom-centre so scaling it (1 / zoom) keeps the bubble pinned above the tree. */
+  bubbleAnchor: { pointerEvents: 'box-none', position: 'absolute', width: BUBBLE_W * 2, height: BUBBLE_ANCHOR_H, zIndex: 20 },
   bubble: {
     position: 'absolute',
+    left: BUBBLE_W / 2,
+    bottom: BUBBLE_ANCHOR_H / 2,
     width: BUBBLE_W,
     padding: spacing.sm,
     gap: spacing.sm,

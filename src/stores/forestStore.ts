@@ -23,9 +23,8 @@ interface ForestState {
   /** Little creatures wandering at the front of the garden (any combination, empty = nobody). */
   critters: CritterKind[];
   setCritters: (critters: CritterKind[]) => void;
-  /** Extra rows/columns of empty land the reader added (땅 넓히기, no upper limit). */
+  /** Extra rows/columns of empty land beyond the automatic size (땅 넓히기 / 땅 좁히기, no upper limit). */
   gardenExtra: number;
-  expandGarden: () => void;
   setGardenExtra: (extra: number) => void;
   /** Records a local watering; returns false if this forest was already watered on `day`. */
   waterLocal: (forestId: string, day: string) => boolean;
@@ -45,7 +44,6 @@ export const useForestStore = create<ForestState>()(
       critters: [...DEFAULT_CRITTERS],
       setCritters: (critters) => set({ critters: normalizeCritters(critters) }),
       gardenExtra: 0,
-      expandGarden: () => set((s) => ({ gardenExtra: cleanExtra(s.gardenExtra) + 1 })),
       setGardenExtra: (extra) => set({ gardenExtra: cleanExtra(extra) }),
       waterLocal: (forestId, day) => {
         const current = get().waterings[forestId] ?? { count: 0 };

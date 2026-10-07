@@ -3,6 +3,7 @@ import { useEffect, useMemo } from 'react';
 import { useTranslation } from 'react-i18next';
 import { StyleSheet, View } from 'react-native';
 
+import { StackTabBar } from '@/components/ForestTabBar';
 import { AppText, Button, Card, EmptyState, IconButton, Screen, showToast } from '@/components/ui';
 import { useEntitlements } from '@/lib/entitlements';
 import { useMixerStore } from '@/stores/mixerStore';
@@ -44,7 +45,7 @@ export default function RoomScreen() {
 
   if (!room || !allowed) {
     return (
-      <Screen title={t('together.rooms.title')} headerLeft={back}>
+      <Screen title={t('together.rooms.title')} headerLeft={back} footer={<StackTabBar />}>
         <EmptyState emoji="🔒" title={room ? t('together.rooms.locked') : t('together.rooms.notFound')} />
       </Screen>
     );
@@ -53,7 +54,7 @@ export default function RoomScreen() {
   const soundOn = playing && !!roomMix;
 
   return (
-    <Screen title={t(`together.rooms.${room.id}.name`)} subtitle={t(`together.rooms.${room.id}.desc`)} headerLeft={back}>
+    <Screen title={t(`together.rooms.${room.id}.name`)} subtitle={t(`together.rooms.${room.id}.desc`)} headerLeft={back} footer={<StackTabBar />}>
       <RoomScene room={room} peers={here} height={300} />
       <View style={styles.row}>
         <AppText variant="caption" muted style={styles.flex} accessibilityLabel="room-count">

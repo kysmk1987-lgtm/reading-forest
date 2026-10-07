@@ -174,7 +174,7 @@ export default function CardMakerScreen() {
     <Screen
       title={t('cards.title')}
       subtitle={t('cards.subtitle')}
-      headerLeft={<IconButton name="chevron-back" accessibilityLabel={t('common.back')} onPress={() => (router.canGoBack() ? router.back() : router.navigate('/gallery'))} />}>
+      headerLeft={<IconButton name="chevron-back" accessibilityLabel={t('common.back')} onPress={() => (router.canGoBack() ? router.back() : router.dismissTo('/gallery'))} />}>
       <Card style={styles.section}>
         <AppText variant="subtitle">📚 {t('cards.pickBook')}</AppText>
         {books.length ? (

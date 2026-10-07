@@ -1,31 +1,50 @@
 import { router, useLocalSearchParams } from 'expo-router';
 import { useEffect } from 'react';
 import { useTranslation } from 'react-i18next';
-import { ActivityIndicator, StyleSheet, View } from 'react-native';
+import { ActivityIndicator, Platform, StyleSheet, View } from 'react-native';
 
 import { AppText, showToast } from '@/components/ui';
-import { useProfileStore } from '@/stores/profileStore';
+import { canEnterApp, lastOAuthProvider, markSessionAlive, useAuthStore } from '@/features/auth/authStore';
+import { useAuthText } from '@/features/auth/AuthUI';
+import { oauthFailure } from '@/features/auth/useAuth';
+import { getSupabase } from '@/lib/supabase';
 import { colors, spacing } from '@/theme';
 
-/** OAuth providers return here; Supabase reads `?code=` itself, we just wait for the session and move on. */
+/**
+ * OAuth providers and sign-up confirmation mails return here (outside the login gate).
+ * Web: supabase-js reads `?code=` itself; native deep links (e-mail confirmation) carry the code, exchanged here.
+ */
 export default function AuthCallbackScreen() {
   const { t } = useTranslation();
-  const params = useLocalSearchParams<{ error?: string; error_description?: string }>();
-  const signedIn = useProfileStore((s) => s.authMode !== 'guest' && s.authMode !== 'anonymous');
+  const { failureText } = useAuthText();
+  const params = useLocalSearchParams<{ code?: string; error?: string; error_code?: string; error_description?: string }>();
+  const signedIn = useAuthStore((s) => canEnterApp(s.status));
+
+  useEffect(() => {
+    if (Platform.OS === 'web' || !params.code) return;
+    markSessionAlive();
+    getSupabase()
+      ?.auth.exchangeCodeForSession(params.code)
+      .then(({ error }) => error && console.warn('[auth] callback exchange', error));
+  }, [params.code]);
 
   useEffect(() => {
     if (params.error) {
-      showToast(t('my.authError'));
-      router.replace('/my');
+      showToast(failureText(oauthFailure(params), lastOAuthProvider()) ?? t('auth.callbackFailed'));
+      router.replace('/login');
       return;
     }
     if (signedIn) {
       showToast(t('my.signedIn'));
-      router.replace('/my');
+      router.replace('/');
       return;
     }
-    const timer = setTimeout(() => router.replace('/my'), 8000);
+    const timer = setTimeout(() => {
+      showToast(t('auth.callbackFailed'));
+      router.replace('/login');
+    }, 8000);
     return () => clearTimeout(timer);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- react to the error / sign-in only, not every param object
   }, [params.error, signedIn, t]);
 
   return (

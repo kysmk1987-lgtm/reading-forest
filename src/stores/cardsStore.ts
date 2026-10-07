@@ -14,6 +14,7 @@ export interface MadeCard {
 interface CardsState {
   made: MadeCard[];
   recordCard: (card: Omit<MadeCard, 'createdAt'>) => void;
+  clearLocal: () => void;
 }
 
 export const useCardsStore = create<CardsState>()(
@@ -28,6 +29,7 @@ export const useCardsStore = create<CardsState>()(
           made[i] = { ...made[i], ...card, createdAt: made[i].createdAt };
           return { made };
         }),
+      clearLocal: () => set({ made: [] }),
     }),
     { name: 'rf-cards', storage: persistStorage },
   ),

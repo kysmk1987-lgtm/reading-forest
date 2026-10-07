@@ -6,7 +6,18 @@ import assert from 'node:assert/strict';
 
 import { parsePageCount } from '../api/_lib/pages';
 import { DEFAULT_CRITTERS, effectiveCritters, normalizeCritters, toggleCritter } from '../src/features/forest/critters';
-import { GARDEN_MAX, gardenSize, layoutGarden, LEGACY_GARDEN_MAX, tileAt, transplant, validGardenCoord } from '../src/features/forest/layout';
+import {
+  expandGarden,
+  GARDEN_MAX,
+  GARDEN_MIN,
+  gardenSize,
+  layoutGarden,
+  LEGACY_GARDEN_MAX,
+  shrinkGarden,
+  tileAt,
+  transplant,
+  validGardenCoord,
+} from '../src/features/forest/layout';
 import { AVATAR_IDS, AVATARS, DEFAULT_AVATAR, effectiveAvatar } from '../src/features/profile/avatars';
 import { defaultProgressUnit, pagesDisplay } from '../src/features/library/pages';
 import { entryToRow, rowToEntry, withLegacyGardenColumns, withoutGardenColumns } from '../src/features/library/syncMapping';
@@ -130,6 +141,85 @@ test('초기화: pinning the pre-edit layout and the old extra restores the orig
   const restored = layoutGarden(pinned(start.positions), 0);
   assert.equal(restored.n, start.n);
   assert.deepEqual(restored.positions, start.positions);
+});
+
+console.log('땅 넓히기 / 땅 좁히기');
+const pinAll = (list: ReturnType<typeof trees>, layout: Record<string, { c: number; r: number }>) =>
+  list.map((t) => ({ ...t, gardenX: layout[t.id].c, gardenY: layout[t.id].r }));
+test('expanding adds the far row and column, keeps every tree where it stood', () => {
+  const start = layoutGarden(trees(2), 0);
+  const grown = expandGarden(trees(2), 0)!;
+  assert.equal(grown.n, start.n + 1);
+  assert.deepEqual(grown.positions, start.positions, 'pinned at the old tiles, nothing re-centres');
+  const after = layoutGarden(pinAll(trees(2), grown.positions), grown.extra);
+  assert.equal(after.n, start.n + 1);
+  assert.deepEqual(after.positions, start.positions);
+});
+test('expanding always adds visible land, even when a far tile set the size', () => {
+  const list = trees(2, { 1: { gardenX: 6, gardenY: 0 } });
+  assert.equal(layoutGarden(list, 0).n, 7);
+  const grown = expandGarden(list, 0)!;
+  assert.equal(grown.n, 8);
+  assert.equal(layoutGarden(pinAll(list, grown.positions), grown.extra).n, 8);
+});
+test('shrinking reverses one expansion step (size and tiles)', () => {
+  const start = layoutGarden(trees(3), 0);
+  const grown = expandGarden(trees(3), 0)!;
+  const grownTrees = pinAll(trees(3), grown.positions);
+  const back = shrinkGarden(grownTrees, grown.extra)!;
+  assert.ok(back);
+  assert.equal(back.n, start.n);
+  assert.equal(back.extra, 0);
+  const after = layoutGarden(pinAll(trees(3), back.positions), back.extra);
+  assert.equal(after.n, start.n);
+  assert.deepEqual(after.positions, start.positions);
+});
+test('shrinking is blocked by a tree on the last row or column', () => {
+  const list = trees(2, { 0: { gardenX: 1, gardenY: 1 }, 1: { gardenX: 4, gardenY: 0 } });
+  assert.equal(layoutGarden(list, 0).n, 5);
+  assert.equal(shrinkGarden(list, 0), null, 'tree on c = n - 1');
+  const row = trees(2, { 0: { gardenX: 1, gardenY: 1 }, 1: { gardenX: 0, gardenY: 4 } });
+  assert.equal(shrinkGarden(row, 0), null, 'tree on r = n - 1');
+  const corner = trees(2, { 0: { gardenX: 1, gardenY: 1 }, 1: { gardenX: 4, gardenY: 4 } });
+  assert.equal(shrinkGarden(corner, 0), null, 'tree on the far corner');
+  const inner = trees(2, { 0: { gardenX: 1, gardenY: 1 }, 1: { gardenX: 3, gardenY: 3 } });
+  const ok = shrinkGarden(inner, 2)!;
+  assert.equal(ok.n, 4);
+  assert.equal(layoutGarden(pinAll(inner, ok.positions), ok.extra).n, 4);
+});
+test('shrinking stops at the automatic size', () => {
+  assert.equal(shrinkGarden(trees(2), 0), null, 'already the minimum (3×3)');
+  assert.equal(shrinkGarden(trees(14), 0), null, 'automatic 4×4 for 14 trees');
+  assert.equal(shrinkGarden([], 0), null);
+  const one = shrinkGarden(trees(1, { 0: { gardenX: 0, gardenY: 0 } }), 1)!;
+  assert.equal(one.n, GARDEN_MIN);
+  assert.equal(one.extra, 0);
+});
+test('repeated expand then shrink returns to the start; 초기화 restores size and tiles', () => {
+  let list = trees(4);
+  const start = layoutGarden(list, 0);
+  let extra = 0;
+  for (let i = 0; i < 3; i++) {
+    const step = expandGarden(list, extra)!;
+    list = pinAll(list, step.positions);
+    extra = step.extra;
+  }
+  assert.equal(layoutGarden(list, extra).n, start.n + 3);
+  const moved = transplant(layoutGarden(list, extra).positions, 't0', { c: start.n + 2, r: 0 }, start.n + 3)!;
+  list = pinAll(list, moved);
+  assert.equal(shrinkGarden(list, extra), null, 'the moved tree blocks shrinking');
+  const reset = layoutGarden(pinAll(list, start.positions), 0);
+  assert.equal(reset.n, start.n);
+  assert.deepEqual(reset.positions, start.positions);
+  list = pinAll(list, start.positions);
+  extra = 3;
+  for (let i = 0; i < 3; i++) {
+    const step = shrinkGarden(list, extra)!;
+    list = pinAll(list, step.positions);
+    extra = step.extra;
+  }
+  assert.equal(layoutGarden(list, extra).n, start.n);
+  assert.equal(shrinkGarden(list, extra), null);
 });
 
 console.log('premium decorations');

@@ -16,6 +16,8 @@ export interface ScreenProps {
   contentStyle?: StyleProp<ViewStyle>;
   /** Apply top safe-area padding (disable when a navigator header is shown). */
   safeTop?: boolean;
+  /** Pinned below the content, outside the scroll view (e.g. `StackTabBar`). */
+  footer?: ReactNode;
 }
 
 export function Screen({
@@ -27,6 +29,7 @@ export function Screen({
   scroll = true,
   contentStyle,
   safeTop = true,
+  footer,
 }: ScreenProps) {
   const insets = useSafeAreaInsets();
   const header =
@@ -62,6 +65,7 @@ export function Screen({
           {children}
         </View>
       )}
+      {footer}
     </View>
   );
 }

@@ -1,14 +1,29 @@
+import { toISODate } from '@/lib/date';
 import type { LibraryEntry, ReadingLog, ReadingLogKind } from '@/types';
+
+/** Reading log kinds plus `want`: the day a book was put on the wishlist (읽고 싶은 책). */
+export type CalendarKind = ReadingLogKind | 'want';
 
 export interface DayActivity {
   entry: LibraryEntry;
-  kind: ReadingLogKind;
+  /** The most notable kind for this book on this day. */
+  kind: CalendarKind;
+  /** Every kind for this book on this day, most notable first. */
+  kinds: CalendarKind[];
   pages: number;
 }
 
-const KIND_PRIORITY: Record<ReadingLogKind, number> = { focus: 0, progress: 1, add: 2, complete: 3 };
+const KIND_PRIORITY: Record<CalendarKind, number> = { focus: 0, progress: 1, want: 2, add: 3, complete: 4 };
+const byPriority = (a: CalendarKind, b: CalendarKind) => KIND_PRIORITY[b] - KIND_PRIORITY[a];
 
-/** Activities per day (`YYYY-MM-DD`) for one month, one row per book (the most notable kind wins). */
+/** Kinds shown as small markers on calendar days (읽기 시작 · 읽고 싶은 책 · 완독). */
+export const MARKER_KINDS = ['add', 'want', 'complete'] as const satisfies readonly CalendarKind[];
+
+/**
+ * Activities per day (`YYYY-MM-DD`) for one month, one row per book.
+ * Start days come from `startDate`, finish days from `endDate` (falling back to the log date), and
+ * wishlist days from when a `want` book was added. `onlyComplete` keeps finish days only.
+ */
 export function activitiesByDay(
   logs: ReadingLog[],
   entries: Record<string, LibraryEntry>,
@@ -18,21 +33,45 @@ export function activitiesByDay(
 ): Map<string, DayActivity[]> {
   const prefix = `${year}-${String(month).padStart(2, '0')}-`;
   const days = new Map<string, Map<string, DayActivity>>();
+  const add = (date: string, entry: LibraryEntry, kind: CalendarKind, pages: number) => {
+    if (!date.startsWith(prefix) || (onlyComplete && kind !== 'complete')) return;
+    const day = days.get(date) ?? new Map<string, DayActivity>();
+    const prev = day.get(entry.id);
+    const kinds = prev ? (prev.kinds.includes(kind) ? prev.kinds : [...prev.kinds, kind].sort(byPriority)) : [kind];
+    day.set(entry.id, { entry, kind: kinds[0], kinds, pages: (prev?.pages ?? 0) + pages });
+    days.set(date, day);
+  };
+
+  const completed = new Set<string>();
   for (const log of logs) {
-    if (!log.date.startsWith(prefix)) continue;
-    if (onlyComplete && log.kind !== 'complete') continue;
     const entry = entries[log.entryId];
     if (!entry) continue;
-    const day = days.get(log.date) ?? new Map<string, DayActivity>();
-    const prev = day.get(entry.id);
-    day.set(entry.id, {
-      entry,
-      kind: prev && KIND_PRIORITY[prev.kind] > KIND_PRIORITY[log.kind] ? prev.kind : log.kind,
-      pages: (prev?.pages ?? 0) + log.pagesDelta,
-    });
-    days.set(log.date, day);
+    if (log.kind === 'complete') {
+      completed.add(entry.id);
+      add(entry.status === 'read' && entry.endDate ? entry.endDate : log.date, entry, 'complete', log.pagesDelta);
+    } else if (log.kind === 'add' && entry.startDate && entry.status !== 'want' && log.date !== entry.startDate) {
+      // Added on a different day than the chosen start date: the start marker goes on `startDate` below.
+      if (log.pagesDelta > 0) add(log.date, entry, 'progress', log.pagesDelta);
+    } else {
+      add(log.date, entry, log.kind, log.pagesDelta);
+    }
   }
-  return new Map([...days].map(([date, m]) => [date, [...m.values()]]));
+  for (const entry of Object.values(entries)) {
+    if (entry.status === 'want') {
+      add(toISODate(new Date(entry.createdAt)), entry, 'want', 0);
+      continue;
+    }
+    if (entry.startDate) add(entry.startDate, entry, 'add', 0);
+    if (entry.status === 'read' && entry.endDate && !completed.has(entry.id)) add(entry.endDate, entry, 'complete', 0);
+  }
+  return new Map(
+    [...days].map(([date, m]) => [date, [...m.values()].sort((a, b) => byPriority(a.kind, b.kind))]),
+  );
+}
+
+/** Distinct marker kinds on one day, in `MARKER_KINDS` order. */
+export function markersOf(items: DayActivity[]): CalendarKind[] {
+  return MARKER_KINDS.filter((k) => items.some((a) => a.kinds.includes(k)));
 }
 
 export interface MonthTotals {

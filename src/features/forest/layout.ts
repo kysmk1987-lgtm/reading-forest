@@ -76,6 +76,35 @@ export function layoutGarden(trees: Plantable[], extra = 0): GardenLayout {
   return { n, positions };
 }
 
+/** A new garden edge for 땅 넓히기 / 땅 좁히기: the `extra` to store and every tree's tile to pin. */
+export interface GardenResize {
+  extra: number;
+  n: number;
+  positions: Record<string, Tile>;
+}
+
+/**
+ * 땅 넓히기: one more row and column on the far edges (c = n and r = n), so tile coordinates never shift.
+ * Every tree is pinned where it stands, otherwise unplaced trees would re-centre in the bigger garden.
+ */
+export function expandGarden(trees: Plantable[], extra = 0): GardenResize | null {
+  const { n, positions } = layoutGarden(trees, extra);
+  if (n >= GARDEN_MAX) return null;
+  return { extra: n + 1 - gardenSize(trees.length), n: n + 1, positions };
+}
+
+/**
+ * 땅 좁히기, the reverse of one 땅 넓히기 step: drops the last row and column (c = n - 1 and r = n - 1).
+ * Null when a tree stands on that edge or the garden is already at its automatic size.
+ */
+export function shrinkGarden(trees: Plantable[], extra = 0): GardenResize | null {
+  const { n, positions } = layoutGarden(trees, extra);
+  const min = gardenSize(trees.length);
+  if (n - 1 < min || (n - 1) * (n - 1) < trees.length) return null;
+  if (Object.values(positions).some((t) => t.c >= n - 1 || t.r >= n - 1)) return null;
+  return { extra: n - 1 - min, n: n - 1, positions };
+}
+
 /**
  * Moves `treeId` to `target`. An occupied target swaps the two trees. Returns the full new layout
  * (every tree pinned) so later additions never reshuffle what the reader arranged, or null for a no-op.

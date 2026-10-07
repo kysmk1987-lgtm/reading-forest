@@ -10,6 +10,7 @@
 | `e2e-s6.mjs` | 6차 기능 로컬 E2E (옮겨 심기 · 도감 · 리뷰 2인 · 쪽수 · 설정) — 가짜 Supabase 필요 |
 | `e2e-live-s6.mjs` · `e2e-live-s6c.mjs` | 배포 사이트 점검 (베스트셀러 · 자동 쪽수 · 콘솔 오류 0) |
 | `e2e-gallery.mjs` · `shot-forest.mjs` | 4차 갤러리 E2E · 숲 스크린샷 |
+| `e2e-auth.mjs` | 로그인 게이트 E2E (게이트 · 입력 검사 · 이메일 가입 · 로그아웃 · 아이디 저장 · 자동 로그인 · 익명 기록 옮기기 · 계정 전환) — 가짜 Supabase를 바라보는 **개발 서버**에 실행: `node scripts/e2e/e2e-auth.mjs http://localhost:8105 http://localhost:54329` |
 
 ## 배포 사이트 점검 (가장 간단)
 ```powershell

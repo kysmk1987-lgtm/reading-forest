@@ -17,14 +17,23 @@ interface ProfileState {
   uid: string | null;
   email: string | null;
   photoURL: string | null;
+  /** Real (non-anonymous) account whose records are on this device; null = guest / anonymous data that carries over on sign-in. */
+  dataOwner: string | null;
   setNickname: (nickname: string) => void;
   setForestName: (forestName: string) => void;
   setAvatar: (avatar: AvatarId) => void;
   setAccount: (account: { authMode: AuthMode; uid: string | null; email?: string | null; photoURL?: string | null }) => void;
+  setDataOwner: (uid: string | null) => void;
+  /** Another account signed in on this device: forget the previous account's profile look (its copy lives on the server). */
+  resetIdentity: () => void;
 }
 
 const DEFAULT_NICKNAMES = ['도토리', '새싹', '솔방울', '솜사탕', '나뭇잎', '조약돌'];
 const DEFAULT_SUFFIX = '독서가';
+
+function randomDefaultNickname() {
+  return `${DEFAULT_NICKNAMES[Math.floor(Math.random() * DEFAULT_NICKNAMES.length)]} ${DEFAULT_SUFFIX}`;
+}
 
 export function isDefaultNickname(nickname: string) {
   return nickname.endsWith(DEFAULT_SUFFIX);
@@ -33,17 +42,20 @@ export function isDefaultNickname(nickname: string) {
 export const useProfileStore = create<ProfileState>()(
   persist(
     (set) => ({
-      nickname: `${DEFAULT_NICKNAMES[Math.floor(Math.random() * DEFAULT_NICKNAMES.length)]} ${DEFAULT_SUFFIX}`,
+      nickname: randomDefaultNickname(),
       authMode: 'guest',
       uid: null,
       email: null,
       photoURL: null,
+      dataOwner: null,
       forestName: '',
       avatar: DEFAULT_AVATAR,
       setNickname: (nickname) => set({ nickname: nickname.trim() || `숲 ${DEFAULT_SUFFIX}` }),
       setForestName: (forestName) => set({ forestName: forestName.trim().slice(0, FOREST_NAME_MAX) }),
       setAvatar: (avatar) => set({ avatar }),
       setAccount: ({ authMode, uid, email = null, photoURL = null }) => set({ authMode, uid, email, photoURL }),
+      setDataOwner: (dataOwner) => set({ dataOwner }),
+      resetIdentity: () => set({ nickname: randomDefaultNickname(), forestName: '', avatar: DEFAULT_AVATAR }),
     }),
     {
       name: 'rf-profile',

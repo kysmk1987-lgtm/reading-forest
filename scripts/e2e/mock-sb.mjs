@@ -46,15 +46,27 @@ setInterval(() => writeFileSync(`${process.env.TEMP}\\rf-e2e\\mock-sb.log`, log.
 const b64u = (o) => Buffer.from(JSON.stringify(o)).toString('base64url');
 const jwt = (claims) => `${b64u({ alg: 'HS256', typ: 'JWT' })}.${b64u(claims)}.c2ln`;
 const sessions = new Map(); // refresh → uid
+// Email accounts (auto-confirmed unless MOCK_CONFIRM_EMAIL=1, then password login answers email_not_confirmed).
+const emailUsers = new Map(); // email → { id, password, meta, confirmed }
+const emailById = (uid) => [...emailUsers.entries()].find(([, u]) => u.id === uid);
 function decode(token) {
   try { return JSON.parse(Buffer.from(token.split('.')[1], 'base64url').toString()); } catch { return null; }
+}
+function userJson(uid) {
+  const found = emailById(uid);
+  const now = new Date().toISOString();
+  if (found) {
+    const [email, u] = found;
+    return { id: uid, aud: 'authenticated', role: 'authenticated', is_anonymous: false, email, phone: '', app_metadata: { provider: 'email', providers: ['email'] }, user_metadata: u.meta, identities: [{ id: uid, provider: 'email' }], created_at: now, updated_at: now };
+  }
+  return { id: uid, aud: 'authenticated', role: 'authenticated', is_anonymous: true, email: '', phone: '', app_metadata: { provider: 'anonymous', providers: ['anonymous'] }, user_metadata: {}, identities: [], created_at: now, updated_at: now };
 }
 function session(uid) {
   const now = Math.floor(Date.now() / 1000);
   const refresh = randomUUID();
   sessions.set(refresh, uid);
-  const user = { id: uid, aud: 'authenticated', role: 'authenticated', is_anonymous: true, email: '', phone: '', app_metadata: { provider: 'anonymous', providers: ['anonymous'] }, user_metadata: {}, identities: [], created_at: new Date().toISOString(), updated_at: new Date().toISOString() };
-  return { access_token: jwt({ sub: uid, role: 'authenticated', aud: 'authenticated', is_anonymous: true, exp: now + 3600, iat: now, session_id: refresh }), token_type: 'bearer', expires_in: 3600, expires_at: now + 3600, refresh_token: refresh, user };
+  const user = userJson(uid);
+  return { access_token: jwt({ sub: uid, role: 'authenticated', aud: 'authenticated', is_anonymous: user.is_anonymous, exp: now + 3600, iat: now, session_id: refresh }), token_type: 'bearer', expires_in: 3600, expires_at: now + 3600, refresh_token: refresh, user };
 }
 
 // ---------- SQL helpers ----------
@@ -281,11 +293,34 @@ const server = createServer(async (req, res) => {
     let out;
     if (url.pathname.startsWith('/auth/v1/')) {
       const p = url.pathname.slice(9);
-      if (p === 'signup' && req.method === 'POST') {
+      const body = req.method === 'POST' ? JSON.parse(raw.toString() || '{}') : {};
+      if (p === 'signup' && req.method === 'POST' && body.email) {
+        const email = String(body.email).toLowerCase();
+        if (emailUsers.has(email)) {
+          out = { status: 422, json: { code: 422, error_code: 'user_already_exists', msg: 'User already registered' } };
+        } else {
+          const id = randomUUID();
+          const confirmed = process.env.MOCK_CONFIRM_EMAIL !== '1';
+          emailUsers.set(email, { id, password: body.password, meta: body.data ?? {}, confirmed });
+          await db.query(`insert into auth.users (id, raw_user_meta_data, is_anonymous) values ($1, $2, false)`, [id, JSON.stringify(body.data ?? {})]);
+          note(`signup email ${email} ${id} confirmed=${confirmed}`);
+          out = { status: 200, json: confirmed ? session(id) : userJson(id) };
+        }
+      } else if (p === 'signup' && req.method === 'POST') {
         const id = randomUUID();
         await db.query(`insert into auth.users (id) values ($1)`, [id]);
         note(`signup ${id}`);
         out = { status: 200, json: session(id) };
+      } else if (p === 'token' && url.searchParams.get('grant_type') === 'password') {
+        const u = emailUsers.get(String(body.email ?? '').toLowerCase());
+        if (!u || u.password !== body.password) out = { status: 400, json: { code: 400, error_code: 'invalid_credentials', msg: 'Invalid login credentials' } };
+        else if (!u.confirmed) out = { status: 400, json: { code: 400, error_code: 'email_not_confirmed', msg: 'Email not confirmed' } };
+        else out = { status: 200, json: session(u.id) };
+      } else if (p === 'settings') {
+        out = { status: 200, json: { external: { email: true, anonymous_users: true, kakao: false, google: false }, disable_signup: false, mailer_autoconfirm: process.env.MOCK_CONFIRM_EMAIL !== '1' } };
+      } else if (p === 'recover' || p === 'resend') {
+        note(`${p} ${body.email}`);
+        out = { status: 200, json: {} };
       } else if (p === 'token' && url.searchParams.get('grant_type') === 'refresh_token') {
         const { refresh_token } = JSON.parse(raw.toString() || '{}');
         const id = sessions.get(refresh_token);

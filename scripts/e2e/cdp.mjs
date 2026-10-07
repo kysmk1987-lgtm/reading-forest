@@ -18,7 +18,11 @@ const AUDIO_PROBE = `(() => {
 export async function openBrowser(name, { base, out, ignore = [] }) {
   mkdirSync(out, { recursive: true });
   const port = 9400 + Math.floor(Math.random() * 400);
-  const proc = spawn(EDGE, ['--headless=new', '--disable-gpu', `--remote-debugging-port=${port}`, `--user-data-dir=${process.env.TEMP}\\rf-e2e\\prof-${name}-${Date.now()}`, 'about:blank'], { stdio: 'ignore' });
+  const profile = `${process.env.TEMP}\\rf-e2e\\prof-${name}-${Date.now()}`;
+  // The "save password?" prompt silently blocks input after a page with a typed password unloads.
+  mkdirSync(`${profile}\\Default`, { recursive: true });
+  writeFileSync(`${profile}\\Default\\Preferences`, JSON.stringify({ credentials_enable_service: false, profile: { password_manager_enabled: false } }));
+  const proc = spawn(EDGE, ['--headless=new', '--disable-gpu', '--disable-features=PasswordManagerOnboarding,PasswordLeakDetection', `--remote-debugging-port=${port}`, `--user-data-dir=${profile}`, 'about:blank'], { stdio: 'ignore' });
   let targets = [];
   for (let i = 0; i < 60 && !targets.some((t) => t.type === 'page'); i++) {
     try { targets = await (await fetch(`http://127.0.0.1:${port}/json/list`)).json(); } catch {}

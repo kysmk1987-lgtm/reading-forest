@@ -4,6 +4,7 @@ import { useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { ActivityIndicator, Animated, Platform, StyleSheet, View } from 'react-native';
 
+import { StackTabBar } from '@/components/ForestTabBar';
 import { AppText, Button, Card, EmptyState, IconButton, Screen, showToast } from '@/components/ui';
 import { DEMO_FOREST, DEMO_FOREST_ID } from '@/features/forest/demo';
 import { ForestGarden } from '@/features/forest/ForestGarden';
@@ -109,7 +110,7 @@ export default function PublicForestScreen() {
 
   if (!view) {
     return (
-      <Screen title={t('forest.publicTitleFallback')} headerLeft={back}>
+      <Screen title={t('forest.publicTitleFallback')} headerLeft={back} footer={<StackTabBar />}>
         {remote.isLoading ? (
           <ActivityIndicator color={colors.primary} />
         ) : (
@@ -127,7 +128,7 @@ export default function PublicForestScreen() {
   const finished = view.trees.filter((tr) => tr.status === 'read').length;
 
   return (
-    <Screen title={t('forest.publicTitle', { name: view.nickname })} subtitle={t('forest.publicSubtitle', { trees: view.trees.length, finished })} headerLeft={back}>
+    <Screen title={t('forest.publicTitle', { name: view.nickname })} subtitle={t('forest.publicSubtitle', { trees: view.trees.length, finished })} headerLeft={back} footer={<StackTabBar />}>
       {view.mode === 'local' ? (
         <View style={styles.demoPill}>
           <AppText variant="tiny" color={palette.skyDeep}>

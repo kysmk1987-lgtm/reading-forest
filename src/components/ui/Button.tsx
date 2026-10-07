@@ -6,7 +6,7 @@ import { colors, fontSize, palette, PUFFY_DEPTH, radius, spacing } from '@/theme
 
 import { AppText } from './AppText';
 
-type Variant = 'primary' | 'wood' | 'soft' | 'danger' | 'sky';
+type Variant = 'primary' | 'wood' | 'soft' | 'danger' | 'sky' | 'kakao';
 type Size = 'sm' | 'md' | 'lg';
 
 const VARIANTS: Record<Variant, { face: string; edge: string; text: string }> = {
@@ -15,6 +15,8 @@ const VARIANTS: Record<Variant, { face: string; edge: string; text: string }> = 
   sky: { face: palette.sky, edge: palette.skyDeep, text: colors.textOnPrimary },
   soft: { face: palette.cream, edge: '#E2D4B8', text: colors.text },
   danger: { face: colors.danger, edge: colors.dangerShadow, text: colors.textOnPrimary },
+  // Kakao login brand colours (yellow + dark brown label).
+  kakao: { face: '#FEE500', edge: '#D8BF00', text: '#3C1E1E' },
 };
 
 const SIZES: Record<Size, { height: number; font: number; padX: number }> = {

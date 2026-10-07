@@ -13,6 +13,7 @@ import { Platform, StyleSheet, View } from 'react-native';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 
 import { ToastHost } from '@/components/ui';
+import { canEnterApp, useAuthStore } from '@/features/auth/authStore';
 import { useAuthListener } from '@/features/auth/useAuth';
 import { GrowthCelebration } from '@/features/forest/GrowthCelebration';
 import { CheerLayer } from '@/features/together/CheerLayer';
@@ -26,12 +27,15 @@ SplashScreen.preventAutoHideAsync().catch(() => {});
 export default function RootLayout() {
   const [fontsLoaded, fontError] = useFonts({ Jua_400Regular, Nunito_600SemiBold, Nunito_800ExtraBold });
   useAuthListener();
+  const authStatus = useAuthStore((s) => s.status);
+  const signedIn = canEnterApp(authStatus);
+  const ready = (fontsLoaded || !!fontError) && authStatus !== 'loading';
 
   useEffect(() => {
-    if (fontsLoaded || fontError) SplashScreen.hideAsync().catch(() => {});
-  }, [fontsLoaded, fontError]);
+    if (ready) SplashScreen.hideAsync().catch(() => {});
+  }, [ready]);
 
-  if (!fontsLoaded && !fontError) return null;
+  if (!ready) return null;
 
   return (
     <SafeAreaProvider>
@@ -40,21 +44,32 @@ export default function RootLayout() {
         <View style={styles.page}>
           <View style={styles.phone}>
             <Stack screenOptions={{ headerShown: false, contentStyle: { backgroundColor: colors.background } }}>
-              <Stack.Screen name="(tabs)" />
-              <Stack.Screen name="search" />
-              <Stack.Screen name="book/[id]" />
+              {/* Login gate: a denied screen falls back to the first available one ((tabs) or (auth)), so keep this order. */}
+              <Stack.Protected guard={signedIn}>
+                <Stack.Screen name="(tabs)" />
+                <Stack.Screen name="search" />
+                <Stack.Screen name="book/[id]" />
+                <Stack.Screen name="trees" />
+                <Stack.Screen name="room/[id]" />
+                <Stack.Screen name="card/new" />
+                <Stack.Screen name="card/[id]" />
+                <Stack.Screen name="wrapped" options={{ animation: 'fade' }} />
+              </Stack.Protected>
+              <Stack.Protected guard={!signedIn}>
+                <Stack.Screen name="(auth)" />
+              </Stack.Protected>
               <Stack.Screen name="forest/[slug]" />
               <Stack.Screen name="auth/callback" />
-              <Stack.Screen name="trees" />
-              <Stack.Screen name="room/[id]" />
-              <Stack.Screen name="card/new" />
-              <Stack.Screen name="card/[id]" />
-              <Stack.Screen name="wrapped" options={{ animation: 'fade' }} />
+              <Stack.Screen name="auth/reset" />
             </Stack>
-            <PresenceBridge />
-            <TimerWatcher />
-            <GrowthCelebration />
-            <CheerLayer />
+            {signedIn ? (
+              <>
+                <PresenceBridge />
+                <TimerWatcher />
+                <GrowthCelebration />
+                <CheerLayer />
+              </>
+            ) : null}
             <ToastHost />
           </View>
         </View>

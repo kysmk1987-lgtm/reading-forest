@@ -6,15 +6,21 @@ import { Pressable, StyleSheet, View } from 'react-native';
 
 import { BookCover } from '@/components/BookCover';
 import { AppText, Card, IconButton, SegmentedControl } from '@/components/ui';
+import { STATUS_META } from '@/features/library/statusMeta';
 import { todayISO } from '@/lib/date';
 import { tapFeedback } from '@/lib/feedback';
 import { useLibraryStore } from '@/stores/libraryStore';
 import { colors, palette, radius, spacing } from '@/theme';
 
-import { activitiesByDay, daysInMonth, type DayActivity } from './aggregate';
+import { activitiesByDay, daysInMonth, MARKER_KINDS, markersOf, type CalendarKind, type DayActivity } from './aggregate';
 
 type Filter = 'all' | 'complete';
 const WEEKDAYS = ['sun', 'mon', 'tue', 'wed', 'thu', 'fri', 'sat'] as const;
+const MARKER_EMOJI: Partial<Record<CalendarKind, string>> = {
+  add: STATUS_META.reading.emoji,
+  want: STATUS_META.want.emoji,
+  complete: STATUS_META.read.emoji,
+};
 
 export function ReadingCalendar() {
   const { t } = useTranslation();
@@ -95,13 +101,14 @@ export function ReadingCalendar() {
             const date = iso(day);
             const items = byDay.get(date) ?? [];
             const first = items[0];
+            const markers = markersOf(items);
             const isToday = date === today;
             const isSelected = date === selectedDay;
             return (
               <Pressable
                 key={date}
                 accessibilityRole="button"
-                accessibilityLabel={`${day}`}
+                accessibilityLabel={[`${day}`, ...markers.map((k) => t(`records.kind.${k}`))].join(', ')}
                 onPress={() => {
                   tapFeedback();
                   setSelectedDay(isSelected ? null : date);
@@ -121,13 +128,29 @@ export function ReadingCalendar() {
                       </AppText>
                     </View>
                   ) : null}
-                  {first?.kind === 'complete' ? <AppText style={styles.flag}>🏁</AppText> : null}
+                  {markers.length ? (
+                    <View style={styles.markers} testID={`calendar-markers-${date}`}>
+                      {markers.map((k) => (
+                        <AppText key={k} style={styles.marker}>
+                          {MARKER_EMOJI[k]}
+                        </AppText>
+                      ))}
+                    </View>
+                  ) : null}
                 </View>
               </Pressable>
             );
           })}
         </View>
       </Card>
+
+      <View style={styles.legend}>
+        {(filter === 'complete' ? (['complete'] as const) : MARKER_KINDS).map((k) => (
+          <AppText key={k} variant="tiny" muted>
+            {MARKER_EMOJI[k]} {t(`records.legend.${k}`)}
+          </AppText>
+        ))}
+      </View>
 
       <View style={styles.summary}>
         <SummaryPill emoji="🗓️" label={t('records.summaryDays', { count: summary.days })} />
@@ -152,7 +175,7 @@ export function ReadingCalendar() {
                 <View style={styles.flex}>
                   <AppText numberOfLines={1}>{a.entry.book.title}</AppText>
                   <AppText variant="tiny" muted>
-                    {t(`records.kind.${a.kind}`)}
+                    {a.kinds.map((k) => t(`records.kind.${k}`)).join(' · ')}
                     {a.pages > 0 ? ` · ${t('common.pages', { count: a.pages })}` : ''}
                   </AppText>
                 </View>
@@ -212,12 +235,22 @@ const styles = StyleSheet.create({
   more: {
     position: 'absolute',
     right: 2,
-    bottom: 2,
+    top: 2,
     paddingHorizontal: 4,
     borderRadius: radius.pill,
     backgroundColor: 'rgba(91,70,54,0.75)',
   },
-  flag: { position: 'absolute', left: 2, bottom: 0, fontSize: 11 },
+  markers: {
+    position: 'absolute',
+    left: 2,
+    bottom: 2,
+    flexDirection: 'row',
+    paddingHorizontal: 2,
+    borderRadius: radius.pill,
+    backgroundColor: 'rgba(255,253,246,0.88)',
+  },
+  marker: { fontSize: 9, lineHeight: 13 },
+  legend: { flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'center', gap: spacing.md },
   summary: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.xs, justifyContent: 'center' },
   pill: { paddingHorizontal: spacing.md, paddingVertical: 4, borderRadius: radius.pill, backgroundColor: colors.surface, borderWidth: 1.5, borderColor: colors.border },
   dayCard: { gap: spacing.sm },

@@ -1,7 +1,7 @@
 # 독서의숲 인수인계 문서 (HANDOFF)
 
 > **다음 AI 에이전트 / 사람에게**: 작업을 시작하기 전에 이 문서를 끝까지 읽어주세요. 결정된 사항을 다시 묻거나 뒤집지 말고, 바꿔야 할 이유가 있으면 사용자에게 먼저 확인하세요.
-> 마지막 갱신: 2026-10-07 (6차 + 다음 쪽수 · 교보문고 베스트셀러 + 탭 사운드 지연 개선 · 갤러리 탭바 유지 + 8차: 숲 친구 여러 개 · 땅 넓히기 무제한/끌어서 둘러보기 · 캐릭터 4종까지)
+> 마지막 갱신: 2026-10-07 (6차 + 다음 쪽수 · 교보문고 베스트셀러 + 탭 사운드 지연 개선 · 갤러리 탭바 유지 + 8차: 숲 친구 여러 개 · 땅 넓히기 무제한/끌어서 둘러보기 · 캐릭터 4종까지 + 9차: 땅 좁히기 · 숲 확대/축소 + 독서의숲 베스트셀러 이름 · 보조 화면 탭바 유지 · 캘린더 시작/찜 표시 + 로그인 화면 먼저(로그인 게이트 · 이메일 가입))
 
 ## 1. 프로젝트 한 줄 요약
 책을 읽을수록 나만의 **아이소메트릭 숲**에 나무가 자라는 **독서 기록 앱**. 파스텔 자연 톤, 말랑한 입체 버튼, 가벼운 효과음. 현재는 **한국 출시 버전**(한국어 UI · 국내 도서)이고, 웹(Vercel)으로 먼저 운영 중이며 앱(iOS/Android)은 같은 코드(Expo)로 나중에 출시합니다.
@@ -42,6 +42,7 @@ docs/           HANDOFF.md(이 문서) · screenshots/
 2. **게임 관련 표현 금지**: 특정 게임(예: 동물의 숲 등)을 연상시키는 이름 · 문구 · 그림을 쓰지 않음. 자체 파스텔 자연 디자인.
 3. **Supabase 사용** (Firebase에서 전환 완료). 다른 Supabase 프로젝트는 절대 건드리지 않음.
 4. **도서 데이터**: 검색은 **카카오 책 검색 API**(서버 프록시, 키는 서버에만). **쪽수는 다음(Daum) 책 페이지 스크래핑**이 1순위, **베스트셀러는 인터넷 교보문고 JSON 스크래핑**이 1순위 — 이용약관 · 구조 변경 위험을 **사용자가 알고 수락함**. 끄는 스위치: `ENABLE_DAUM_PAGES=false`, `ENABLE_KYOBO_BESTSELLERS=false`.
+   - 화면 표시는 공급원과 상관없이 **"독서의숲 베스트셀러"**(검색 화면). 부제(예: "인터넷 교보문고 이번 주 종합 순위") · "출처: 교보문고" 문구는 2026-10-07 사용자 요청으로 **표시하지 않음**. 데이터 공급원은 그대로.
 5. **알라딘 OpenAPI는 2026-10-30 종료** → 의존하지 않음(키가 있으면 보조로만).
 6. **함께 읽기 지도는 한국 지도**(17개 시·도). 세계 지도/3D 지구본은 `EXPO_PUBLIC_MAP_SCOPE=GLOBAL` 자리만 있음.
 7. **OCR(사진 글자 인식) 제거** — tesseract.js 삭제. 다시 넣지 않음. (`expo-image-picker`는 2026-10-07 **문구 카드 '사진' 배경(프리미엄)** 용도로만 다시 설치 — OCR과 무관)
@@ -49,13 +50,26 @@ docs/           HANDOFF.md(이 문서) · screenshots/
 9. **독서 DNA 결산 요약 카드 내보내기는 프리미엄 전용** (`entitlements` 게이팅 그대로).
    - 문구 카드 배경: 무료 = 종이 · 숲 · 수채화, 프리미엄 = 밤하늘 · 벚꽃 · 바다 · **사진(내 사진 업로드)** (`src/features/gallery/templates.ts`). 사진은 기기에서만 쓰이고, 갤러리에는 캡처된 카드 PNG(`cards` 버킷)에 합쳐져 올라가므로 별도 버킷 · 마이그레이션 없음(`template = 'photo'`로 저장).
    - 숲 꾸미기(2026-10-07 8차): 날씨는 하나만, **숲 친구(나비·무당벌레 무료 / 개구리·꿀벌·잠자리·반딧불이 프리미엄)는 여러 개 동시 선택**(`forestStore.critters` 배열, persist v1이 예전 `critter` 값을 변환, '없음' = 모두 끄기, 프리미엄이 꺼지면 잠긴 친구만 빠지고 남는 게 없으면 나비). 종류당 2마리(반딧불이는 혼자 6 · 같이 3)로 애니메이션 수를 제한.
-   - **땅 넓히기 무제한**(제품 상한 없음, 좌표 기술 상한 `GARDEN_MAX = 1000`). 숲 카드는 최대 높이 380으로 고정되고, 숲이 넘치면 **끌어서 상하좌우로 둘러보기**(마우스 · 터치, `ForestGarden`의 `GardenPan` — RN responder/PanResponder, 추가 패키지 없음). 한 방향만 넘칠 때는 그 방향만 잡고 나머지는 페이지 스크롤로 넘김. 화면 중심이 땅(마름모) 밖으로 못 나가게 제한, 크기가 바뀌면 가운데로 재정렬, 나무를 누르면 말풍선이 보이도록 자동 이동. 바닥 타일 · 장식은 몇 개의 Path로 묶어 그려서 큰 숲도 가벼움.
+   - **땅 넓히기 무제한**(제품 상한 없음, 좌표 기술 상한 `GARDEN_MAX = 1000`). 숲 카드는 최대 높이 380으로 고정되고, 숲이 넘치면 **끌어서 상하좌우로 둘러보기**(마우스 · 터치, `ForestGarden`의 `GardenPan` — RN responder/PanResponder, 추가 패키지 없음). 한 방향만 넘칠 때는 그 방향만 잡고 나머지는 페이지 스크롤로 넘김. 화면 중심이 땅(마름모 + 나무 한 그루 높이 여유) 밖으로 못 나가게 제한, 크기가 바뀌면 가운데로 재정렬, 나무를 누르면 말풍선이 보이도록 자동 이동. 바닥 타일 · 장식은 몇 개의 Path로 묶어 그려서 큰 숲도 가벼움.
+   - **땅 넓히기 / 땅 좁히기**(2026-10-07 9차, 옮겨 심기 모드의 `땅 ➕ ➖`): 넓히기는 **먼 쪽 두 모서리(c = n, r = n)에 한 줄씩** 붙이므로 좌표 원점이 안 바뀜. 넓히기 · 좁히기 모두 먼저 **모든 나무를 지금 칸에 고정**(`plantTrees`)한 뒤 `gardenExtra`를 바꿔서, 자리가 없던 나무가 가운데로 다시 몰리지 않음(순수 함수 `expandGarden` / `shrinkGarden`, `src/features/forest/layout.ts`). 좁히기는 마지막 줄(c = n−1 또는 r = n−1)에 나무가 있거나 자동 크기(`gardenSize`)에 닿으면 **비활성**(회색). 초기화는 시작 때의 크기 + 위치를 그대로 되돌림. `forestStore.expandGarden` 액션은 없어졌고 `setGardenExtra`만 씀.
+   - **숲 확대 · 축소**(9차): 두 손가락 벌리기/오므리기(앱 · 모바일 웹, 같은 `GardenPan` responder에서 처리 — RNGH 미사용), 웹은 **Ctrl/⌘ + 휠 · 트랙패드 핀치**(일반 휠은 페이지 스크롤 그대로), Safari 데스크톱 gesture 이벤트, 그리고 숲 오른쪽 아래 **＋/− 버튼(웹에서만)**. 범위는 최대 2.5배, 최소는 "숲 전체가 보이는 배율"(단 0.4배 아래로는 안 감, 작은 숲은 1배). 숲 위에서는 브라우저 핀치 확대를 막음(`touch-action`). 끌어서 이동 범위 · 옮겨 심기 끌어 놓기(손가락 이동 ÷ 배율) · 말풍선(배율과 상관없이 같은 크기) 모두 배율을 반영. 실시간 배율은 Animated 값이라 다시 그리지 않고, 멈춘 뒤 `zoom` 상태만 갱신.
    - 캐릭터: 무료 = 단발머리 · 짧은 머리 · 동글 안경 · **똥머리 · 캡모자**, 프리미엄 = 털모자 · 토끼 후드 · 곰돌이 후드 · 양갈래 · **고양이 후드 · 꽃 화관** (`src/features/profile/avatars.ts` + `AvatarArt.tsx`).
 10. **결제(RevenueCat) · 광고(AdMob) · 스토어 출시는 보류** — 사용자가 직접 검토한 뒤 진행. 요금제 게이팅 구조(`src/lib/entitlements.ts`, 마이 → 프리미엄 미리보기(개발용))는 그대로 둠.
 11. 진동은 앱에서 항상 켜짐(설정 토글 없음). 한줄평 공개 범위 기본값은 전체 공개.
    - 효과음(탭 사운드 등)은 `src/lib/feedback.ts` → `src/lib/sfx.ts`(앱: 시작할 때 expo-audio 플레이어를 미리 만들어 두고, 탭은 3개를 돌려 씀) / `src/lib/sfx.web.ts`(웹: Web Audio API + 미리 디코딩한 버퍼, 첫 pointerdown에서 AudioContext 깨움). 웹에서 expo-audio(HTMLAudioElement)를 쓰면 매번 지연이 생기므로 되돌리지 말 것. 소리는 지금처럼 `onPress`에서 냄(`onPressIn`으로 바꾸면 스크롤할 때도 소리가 남).
-   - **문장 갤러리는 `(tabs)` 안의 숨김 탭**(`src/app/(tabs)/gallery.tsx`, `href: null`)이라 하단 탭바 · 광고 자리가 그대로 보임. 주소는 그대로 `/gallery`. 탭 그룹은 `backBehavior="history"`(갤러리에서 뒤로 → 들어온 탭으로). 카드 만들기/카드 상세(`card/new`, `card/[id]`)는 화면을 넓게 쓰려고 루트 Stack에 그대로 둠(탭바 없음). 루트 Stack 화면에서 갤러리로 갈 때는 `router.navigate('/gallery')`를 써야 탭 그룹이 중복으로 쌓이지 않음.
+   - **문장 갤러리는 `(tabs)` 안의 숨김 탭**(`src/app/(tabs)/gallery.tsx`, `href: null`)이라 하단 탭바 · 광고 자리가 그대로 보임. 주소는 그대로 `/gallery`. 탭 그룹은 `backBehavior="history"`(갤러리에서 뒤로 → 들어온 탭으로). 카드 만들기/카드 상세(`card/new`, `card/[id]`)는 화면을 넓게 쓰려고 루트 Stack에 그대로 둠(탭바 없음). 루트 Stack 화면에서 갤러리로 갈 때는 **`router.dismissTo('/gallery')`**(필터는 `router.dismissTo({ pathname: '/gallery', params: { isbn } })`)를 써야 탭 그룹이 중복으로 쌓이지 않음 — `router.navigate`/`push`는 탭 그룹을 하나 더 쌓음(2026-10-07 헤드리스로 확인: 탭바 2개, 뒤로 → 카드로 돌아감).
+   - **보조 화면도 탭바 · 광고 유지**(2026-10-07): `search`, `book/[id]`, `trees`, `room/[id]`, `forest/[slug]`는 루트 Stack에 그대로 두고(주소 · `router.push` 경로 그대로, 책 → 책처럼 쌓이는 뒤로 가기 유지) `Screen`의 `footer={<StackTabBar />}`로 같은 탭바 + 광고 자리를 그림(`src/components/ForestTabBar.tsx`). 들어온 탭이 강조되고(루트 내비게이션 상태에서 아래에 깔린 `(tabs)`의 탭을 찾음, 주소로 바로 들어오면 강조 없음), 탭을 누르면 `router.dismissTo('/library')`처럼 **기존 탭 그룹으로 돌아감**(없으면 교체). 숨김 탭으로 옮기지 않은 이유: 동적 경로(`book/[id]`)를 탭으로 두면 책 → 다른 책이 쌓이지 않고 같은 화면의 파라미터만 바뀜. 탭바 없는 전체 화면: `card/new`, `card/[id]`, `wrapped`, `auth/callback`(+ 로그인 화면들).
+   - 참고: expo-router 57의 Stack은 `NAVIGATE`가 현재 화면과 이름이 같을 때만 기존 화면을 재사용하고, 아니면 새로 push함(`node_modules/expo-router/build/layouts/StackClient.js`). 루트 Stack 화면에서 탭 화면(숨김 탭 포함)으로 **돌아갈 때는 `router.dismissTo`**(아래에 탭 그룹이 있으면 거기까지 닫고 해당 탭으로, 없으면 현재 화면을 교체). `card/[id]` · `card/new`의 갤러리 이동은 모두 `dismissTo`로 바꿈.
+   - **기록 캘린더 표시**(2026-10-07): '전체 보기'는 읽기 시작(📖, `startDate`, 없으면 `add` 로그 날짜) · 읽고 싶은 책(💗, `want` 책의 `createdAt` 날짜) · 완독(🏁, `endDate`, 없으면 `complete` 로그 날짜)을 날짜 칸 아래 작은 표시 + 범례로 보여주고, '완독 보기'는 완독만. 아래 날짜 목록도 같은 기준(`src/features/records/aggregate.ts`의 `activitiesByDay` · `markersOf`, 테스트는 `npm run test:gallery`).
 12. 비밀 값은 절대 커밋하지 않음 (카카오 키, `.env.local`, service_role 키, DB 비밀번호). 커밋 전 `git diff --cached`를 키 패턴으로 검사.
+13. **로그인 화면 먼저(ERP식 로그인 게이트, 2026-10-07)** — 앱을 열면 로그인부터. 예전의 "익명 계정 자동 생성 + 마이의 '로그인하고 기록 지키기' 카드"는 없앰.
+   - 로그인 방법: **카카오 · 구글(Supabase OAuth) · 이메일+비밀번호**. 화면은 `src/app/(auth)/`(`/login` · `/signup` · `/forgot-password`) + 게이트 밖 `src/app/auth/callback.tsx`(OAuth · 가입 인증 메일) · `src/app/auth/reset.tsx`(비밀번호 재설정 메일 → 새 비밀번호). 공유 숲 `/forest/[slug]`도 로그인 없이 열림(방문자 물 주기는 기존처럼 익명 세션).
+   - 게이트: 루트 `_layout.tsx`의 **`Stack.Protected`**(SDK 57에 있음, `redirectTo`는 SDK 58부터라 막히면 "첫 번째로 열 수 있는 화면"으로 감 → `(tabs)` 묶음을 맨 앞, `(auth)`를 그다음에 둘 것). 상태는 `src/features/auth/authStore.ts`(`loading`이면 스플래시 유지 → 딥링크 유지). 익명 세션만 있으면 로그인 화면(서버 동기화도 안 함).
+   - **게스트 버튼 없음**. 대신 기존 익명/게스트 사용자의 **이 기기 기록은 처음 로그인 · 가입한 계정으로 옮겨짐**(기존 업로드+병합 동기화). Supabase의 진짜 identity 연결(`linkIdentity`)은 쓰지 않음 — 대시보드 "Manual linking"이 기본 꺼짐이고, 익명 사용자는 대부분 테스트용이라서. 그래서 익명 계정의 서버 전용 데이터(갤러리 카드 · 리뷰 · 공개 숲)는 새 계정으로 옮겨지지 않음.
+   - **같은 기기에서 다른 계정 로그인**: `profileStore.dataOwner`(기록 주인 uid)가 다르면 이전 계정의 기기 사본(서재 · 독서 로그 · 만든 카드 기록 · 닉네임/숲 이름/캐릭터)을 지우고 새 계정 기록을 내려받음(이전 계정 기록은 서버에 남음). 로그아웃만으로는 기기 사본을 지우지 않음(다시 로그인하면 바로 보이고, 못 올라간 변경도 보존).
+   - 이메일 가입: 이메일 · 닉네임(2~16자) · 비밀번호(영문+숫자 8~72자) · 비밀번호 확인 + 필수 동의 2개(전체 동의 · '보기'). 약관 · 개인정보 문서는 **초안**(`src/features/auth/legal.ts`, 출시 전 운영자 정보 · 보관 기간 · 위탁 업체 채우고 검토 필요, 고치면 `LEGAL_VERSION` 올리기). 닉네임 · 동의 시각 · 문서 버전은 `user_metadata`에 저장, 닉네임은 기존 `handle_new_user` 트리거가 `profiles.nickname`에 넣음 → **마이그레이션 불필요**. 인증 메일 설정이 켜져 있으면(세션 없음) "인증 메일을 보냈어요" 화면 + 다시 보내기.
+   - 로그인 화면: 아이디(이메일) 저장 · 자동 로그인(기본 켬, 끄면 앱/브라우저 탭을 새로 열 때 로그아웃 — 웹은 `sessionStorage` 표시, 앱은 실행 중 메모리) · 비밀번호 보기 · 오류 문구(비밀번호 틀림 · 이메일 미인증(+다시 보내기) · 네트워크 · 요청 과다 · 공급자 꺼짐). 카카오/구글은 누르기 전에 `/auth/v1/settings`로 공급자가 켜졌는지 확인해 "준비 중이에요" 안내(꺼진 공급자로 이동하면 Supabase JSON 오류 페이지가 뜨기 때문).
+   - 개발용 우회: Supabase 환경 변수가 없으면 게이트 없이 로컬 모드, `EXPO_PUBLIC_AUTH_GATE=false`면 게이트를 끄고 예전처럼 익명 세션으로 사용.
 
 ## 5. 배포 (Vercel)
 - 프로젝트: `reading-forest` (팀/스코프 `kysmk1987-8120s-projects`), GitHub `main`에 push → 자동 Production 배포.
@@ -67,6 +81,7 @@ docs/           HANDOFF.md(이 문서) · screenshots/
 | --- | --- | --- | --- |
 | `KAKAO_REST_API_KEY` | 민감(Secret) | 일반(받아올 수 있음) | 서버 전용, `EXPO_PUBLIC_` 붙이지 말 것 |
 | `EXPO_PUBLIC_SUPABASE_URL` · `EXPO_PUBLIC_SUPABASE_ANON_KEY` | 일반 | 일반 | 앱 번들에 포함(RLS로 보호) |
+| `EXPO_PUBLIC_AUTH_GATE` | (미등록 = 로그인 게이트 켜짐) | (미등록) | 개발 · 점검용으로만 `false` (게이트 끄기) |
 | `DATA4LIBRARY_KEY` | 민감 | 일반 | 도서관 정보나루, **승인 대기 중** |
 | `ENABLE_DAUM_PAGES` · `ENABLE_KYOBO_BESTSELLERS` | (없음 = 켜짐) | `true` | 끄려면 `false` |
 | `NL_CERT_KEY` | (미등록) | (미등록) | 국립중앙도서관, 선택 |
@@ -86,12 +101,18 @@ docs/           HANDOFF.md(이 문서) · screenshots/
   | `0005_profile_forest_avatar.sql` | 프로필 숲 이름(`profiles.forest_name`) · 캐릭터(`profiles.avatar`) | ❌ **미적용** — `supabase/setup_0005.sql`을 SQL Editor에서 실행 (적용 전에는 앱이 이 기기에만 저장하고 서버 동기화는 조용히 건너뜀). 캐릭터 id는 정규식 check라 새 캐릭터를 추가해도 수정 불필요 |
   | `0006_garden_unlimited.sql` | 땅 넓히기 무제한: `user_books.garden_x/y` check를 0~11 → **0~999**로 넓힘 | ❌ **미적용** — `supabase/setup_0006.sql` 실행 (0005 다음). 적용 전에는 12칸을 넘는 나무 위치만 빼고 동기화(23514 오류 시 자동 재시도) — 그 위치는 이 기기에만 남음 |
 - 새 마이그레이션은 `0007_…sql`로 추가 → `npm run build:sql`로 `setup_0007.sql` 생성 → 사용자가 SQL Editor에 붙여넣어 실행(에이전트는 DB 비밀번호를 묻지 않음). 적용된 파일은 고치지 말고 새 번호로 추가.
-- 로컬 테스트는 `scripts/e2e/mock-sb.mjs`(PGlite로 실제 마이그레이션 실행)를 사용.
+- 로컬 테스트는 `scripts/e2e/mock-sb.mjs`(PGlite로 실제 마이그레이션 실행)를 사용. 이메일 가입 · 비밀번호 로그인 · `/auth/v1/settings`(카카오 · 구글 꺼짐) · 재설정 메일도 흉내 냄(`MOCK_CONFIRM_EMAIL=1`이면 인증 메일 필요 모드).
+- 로그인 게이트(이메일 가입)는 **DB 변경 없음**(0007 없음) — 닉네임 · 동의 기록은 `auth.users.raw_user_meta_data`.
 
 ## 7. 남은 일 (우선순위 순)
 0. **마이그레이션 0005 · 0006 적용** — `supabase/setup_0005.sql` → `supabase/setup_0006.sql` 순서로 Supabase SQL Editor에 붙여넣고 Run (숲 이름 · 캐릭터 동기화, 12칸 넘는 나무 위치 동기화).
 1. **도서관 정보나루 키 승인 대기** — 승인되면 코드 변경 없이 자동 사용(베스트셀러 2순위, 쪽수 보조). 확인: 정보나루 마이페이지의 상태가 '승인'인지.
-2. **카카오 로그인 공급자 설정**(README "로그인 설정" 참고): Kakao Developers에서 카카오 로그인 활성화 · Redirect URI `https://ucftmqkmjwwasknanimz.supabase.co/auth/v1/callback` · 동의항목 · Client Secret → Supabase Authentication → Providers → Kakao 입력. (구글은 선택)
+2. **로그인 설정 (Supabase 대시보드, README "로그인 설정" 참고)** — 로그인 화면이 먼저 나오므로 최소한 이메일은 꼭 확인:
+   - **Email 공급자 켜짐** 확인(Authentication → Sign In / Providers → Email). **Confirm email** 켤지 결정(앱은 둘 다 처리). 기본 메일 발송은 시간당 몇 통 제한 → 운영 전 **SMTP 설정** 권장. (권장) 최소 비밀번호 길이 8 · 영문+숫자.
+   - **URL Configuration**: Site URL `https://reading-forest-nine.vercel.app`, Redirect URLs에 `https://reading-forest-nine.vercel.app/**` · `http://localhost:8081/**` · `readingforest://**` 있는지 확인(가입 인증 → `/auth/callback`, 비밀번호 재설정 → `/auth/reset`).
+   - **카카오**: Kakao Developers에서 카카오 로그인 활성화 · Redirect URI `https://ucftmqkmjwwasknanimz.supabase.co/auth/v1/callback` · 동의항목 · Client Secret → Supabase Providers → Kakao. ⚠️ 카카오는 **비즈 앱 전환(사업자 인증) 전에는 이메일을 주지 않음** → Supabase Kakao 설정의 **Allow users without an email**을 켜야 로그인됨(안 켜면 "카카오 계정에서 이메일을 받지 못했어요" 안내가 뜸). 설정 전에는 버튼을 누르면 "카카오 로그인은 준비 중이에요".
+   - **구글**: Google Cloud OAuth 클라이언트 → Supabase Providers → Google (설정 전에는 "준비 중" 안내).
+   - 출시 전: 약관 · 개인정보 **초안**(`src/features/auth/legal.ts`) 실제 내용으로 교체 + 검토.
 3. **테스트용 익명 사용자 정리**: 자동 점검 중 운영 DB에 익명 사용자 몇 명과 테스트 서재 기록이 생겼음 → Supabase → Authentication → Users에서 익명(anonymous) 사용자 삭제(관련 데이터는 함께 삭제됨).
 4. (선택) 국립중앙도서관 `NL_CERT_KEY` 발급 — 다음 페이지에 쪽수가 없는 책의 보조.
 5. **다음 단계(사용자 검토 후)**: 인앱 결제(RevenueCat) · 광고(AdMob) · 앱 스토어 출시(EAS Build/Submit).
@@ -101,10 +122,11 @@ docs/           HANDOFF.md(이 문서) · screenshots/
 npx expo start --web          # 개발 서버 (http://localhost:8081, /api는 배포 사이트를 호출)
 npx expo lint                 # 린트 (경고 2개는 기존 것)
 npx tsc --noEmit              # 타입 검사
-npm test                      # 오프라인 테스트 5종 (도서 API · 동기화 · 갤러리/결산 · 숲/리뷰/쪽수 · 스크래퍼 파서)
+npm test                      # 오프라인 테스트 6종 (도서 API · 동기화 · 갤러리/결산 · 숲/리뷰/쪽수 · 스크래퍼 파서 · 로그인 입력 검사/오류 분류)
 npx expo export -p web        # 웹 빌드 확인
 git push origin main          # → Vercel 자동 배포
 node scripts/e2e/e2e-live-s6c.mjs   # 배포 사이트 헤드리스 점검 (Edge 필요)
+node scripts/e2e/e2e-auth.mjs http://localhost:8105 http://localhost:54329   # 로그인 게이트 점검 (가짜 Supabase + 그 주소로 띄운 개발 서버, scripts/e2e/README 참고)
 ```
 - 작업 마무리 규칙: lint · tsc · test 통과 → 커밋 전 비밀 값 검사 → push → Vercel Ready 확인.
 - 한국어가 들어간 파일은 편집 도구로 고치세요(PowerShell 명령으로 쓰면 글자가 깨질 수 있음). 커밋 메시지는 UTF-8 파일로 `git commit -F`.

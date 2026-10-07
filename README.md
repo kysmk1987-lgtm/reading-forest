@@ -78,9 +78,11 @@ npx expo start --web    # 바로 웹으로 실행 (http://localhost:8081)
 - 기록 시트의 **현재 진행** 줄에 "전체 N쪽"이 보이고, 쪽수를 못 찾으면 **"쪽수 정보가 없어요 · 직접 입력"** 링크와 % 입력으로 바뀝니다.
 
 **베스트셀러 추천** (`/api/books/bestsellers`, 6시간 캐시 `s-maxage` + `stale-while-revalidate`), 먼저 답하는 곳을 씁니다:
-1. **인터넷 교보문고 주간 종합 순위** (`api/_lib/kyobo.ts`): 교보문고 베스트셀러 화면이 쓰는 JSON(`store.kyobobook.co.kr/api/gw/best/best-seller/online`)에서 상위 20권(ISBN = `cmdtCode`)을 가져와 카카오로 소개·옮긴이를 보강합니다. 검색 화면에 "교보문고 베스트셀러" + 순위 배지 + **"출처: 교보문고 · 기준일"**(교보문고 베스트셀러 페이지로 연결)이 표시돼요.
-2. **도서관 정보나루 인기 대출**(최근 30일, `DATA4LIBRARY_KEY`가 활성화된 경우) → "요즘 도서관에서 많이 빌린 책"
-3. `src/config/bestsellers.ts`의 **직접 고른 목록**(카카오로 ISBN 확인) → "요즘 많이 읽는 책"
+1. **인터넷 교보문고 주간 종합 순위** (`api/_lib/kyobo.ts`): 교보문고 베스트셀러 화면이 쓰는 JSON(`store.kyobobook.co.kr/api/gw/best/best-seller/online`)에서 상위 20권(ISBN = `cmdtCode`)을 가져와 카카오로 소개·옮긴이를 보강합니다.
+2. **도서관 정보나루 인기 대출**(최근 30일, `DATA4LIBRARY_KEY`가 활성화된 경우)
+3. `src/config/bestsellers.ts`의 **직접 고른 목록**(카카오로 ISBN 확인)
+
+검색 화면에는 공급원과 상관없이 **"독서의숲 베스트셀러"** 제목 + 순위 배지만 보이고, 부제 · 출처 문구는 표시하지 않습니다(2026-10-07 사용자 요청). API 응답의 `source` · `sourceUrl` · 기준일은 그대로 내려옵니다.
 
 > ⚠️ **주의 (스크래핑)**: 다음 책 페이지와 교보문고 JSON은 **공개 API가 아닙니다**. 각 사이트 이용약관에 어긋날 수 있고, 화면 구조가 바뀌면 예고 없이 동작하지 않을 수 있어요(그때는 자동으로 다음 방법으로 넘어가며 앱은 계속 동작). 호출을 최소화하도록 캐시를 길게 두었고, 문제가 생기거나 요청을 받으면 Vercel 환경 변수 `ENABLE_DAUM_PAGES=false` / `ENABLE_KYOBO_BESTSELLERS=false`를 넣고 재배포해서 바로 끌 수 있습니다. 파서는 `scripts/fixtures/`의 저장된 HTML/JSON으로 테스트합니다(`npm run test:scrapers`).
 
@@ -158,7 +160,10 @@ npx vercel --prod --yes                                                         
 - `monthly_reading_stats` 뷰: 월별 독서한 날·쪽수·완독 수 (통계/독서 결산용)
 
 ### 3) 로그인 설정 (Authentication)
-1. **Authentication → Sign In / Providers → Anonymous sign-ins** 켜기 (게스트가 숲 공유·물 주기를 할 때 사용)
+앱은 열면 **로그인 화면부터** 보여줍니다(카카오 · 구글 · 이메일+비밀번호). 아래 설정이 없는 로그인 방법은 버튼을 눌렀을 때 "준비 중" 안내가 나옵니다.
+1. **Authentication → Sign In / Providers → Anonymous sign-ins** 켜기 (로그인하지 않은 방문자가 공유받은 숲에 물을 줄 때 사용)
+   - **Email** 공급자 켜기(기본 켜짐). **Confirm email**은 켜도 꺼도 됩니다 — 켜면 가입 후 "인증 메일을 보냈어요" 화면이 나오고, 끄면 바로 로그인됩니다. 기본 메일 발송은 시간당 몇 통으로 제한되므로 실제 운영에서는 **SMTP 설정**(Authentication → Emails)을 권장합니다.
+   - (권장) **Minimum password length** 8, **Password requirements**: 영문 + 숫자 — 앱에서도 같은 규칙으로 검사합니다.
 2. **카카오 로그인**
    - [Kakao Developers](https://developers.kakao.com) → 내 애플리케이션 → 앱 추가(이미 도서 검색용 앱이 있으면 그대로 사용 가능)
    - **카카오 로그인 → 활성화 ON**
@@ -170,13 +175,17 @@ npx vercel --prod --yes                                                         
 4. **Authentication → URL Configuration**
    - **Site URL**: `https://reading-forest-nine.vercel.app`
    - **Redirect URLs**: `https://reading-forest-nine.vercel.app/**`, `http://localhost:8081/**`, `readingforest://**`, (Vercel 미리보기 주소를 쓰려면) `https://*-kysmk1987-8120s-projects.vercel.app/**`
+   - 앱이 쓰는 주소: OAuth · 가입 인증 메일 → `/auth/callback`, 비밀번호 재설정 메일 → `/auth/reset` (위 `/**` 패턴에 포함됨)
 
 ### 4) 앱에 연결
 Vercel → Project → Settings → Environment Variables(Production/Preview/Development)와 로컬 `.env.local`에 `EXPO_PUBLIC_SUPABASE_URL`, `EXPO_PUBLIC_SUPABASE_ANON_KEY`를 넣고 다시 배포합니다.
 
 ### 동작 방식
-- **게스트 → 로그인 시 데이터 연결**: 처음 로그인하면 이 기기의 서재·독서 로그를 계정으로 업로드하고, 서버의 기록과 합칩니다(같은 책은 최근 수정본 우선). 이후 변경은 바로바로 서버에 저장(write-through), 다른 기기에서 로그인하면 내려받습니다.
-- **카카오/구글 로그인**: 웹은 카카오 페이지로 이동했다가 `/auth/callback`으로 돌아옵니다. 앱(iOS/Android)은 인앱 브라우저(expo-web-browser) + `readingforest://auth/callback` 딥링크로 처리합니다.
+- **로그인 화면 먼저(로그인 게이트)**: 루트 레이아웃의 `Stack.Protected`가 로그인하지 않았거나 익명 세션뿐이면 `(auth)` 화면(`/login` · `/signup` · `/forgot-password`)만 열어 줍니다. 공유 숲(`/forest/…`), `/auth/callback`, `/auth/reset`은 로그인 없이 열립니다. Supabase 환경 변수가 없으면(로컬 모드) 게이트 없이 바로 앱이 열리고, `EXPO_PUBLIC_AUTH_GATE=false`로 개발 중 게이트를 끌 수 있습니다(예전처럼 익명 세션으로 사용).
+- **이 기기 기록 → 계정 연결**: 게스트/익명으로 쓰던 이 기기의 서재·독서 로그는 처음 로그인(또는 가입)한 계정으로 업로드되어 서버의 기록과 합쳐집니다(같은 책은 최근 수정본 우선). 이후 변경은 바로바로 서버에 저장(write-through), 다른 기기에서 로그인하면 내려받습니다. **다른 계정**이 같은 기기에서 로그인하면 이전 계정의 기기 사본은 지우고(서버에는 남아 있음) 새 계정 기록을 내려받습니다(`profiles` 스토어의 `dataOwner`).
+- **카카오/구글 로그인**: 웹은 카카오 페이지로 이동했다가 `/auth/callback`으로 돌아옵니다. 앱(iOS/Android)은 인앱 브라우저(expo-web-browser) + `readingforest://auth/callback` 딥링크로 처리합니다. 누르기 전에 `/auth/v1/settings`로 공급자가 켜져 있는지 확인해서, 꺼져 있으면 Supabase 오류 페이지 대신 "준비 중" 안내를 보여줍니다.
+- **이메일 가입**: 이메일 · 닉네임(2~16자) · 비밀번호(영문+숫자 8자 이상) · 확인 + 필수 동의 2개(서비스 이용약관 · 개인정보 수집 및 이용, **문서는 초안** `src/features/auth/legal.ts`). 닉네임과 동의 시각 · 문서 버전은 `user_metadata`에 저장되고, 닉네임은 기존 트리거가 `profiles.nickname`에 넣습니다(별도 마이그레이션 없음).
+- **아이디 저장 · 자동 로그인**: 이 기기에만 저장(`rf-auth-prefs`). 자동 로그인을 끄면 앱/브라우저 탭을 새로 열 때 로그인 화면이 나옵니다.
 - **공개 숲**: 홈의 **공유** → 서재를 동기화하고 `forests`에 공개 → `/forest/{share_slug}` 링크 공유(Web Share → 복사, 앱은 공유 시트).
 - **물 주기**: 방문자는 익명 로그인으로 `waterings`에 한 줄 추가. 같은 날 두 번째는 unique 제약으로 거절됩니다(한국 시간 기준 날짜).
 
@@ -218,7 +227,7 @@ src/
 │  ├─ ForestTabBar.tsx      # 나무 판자 느낌의 커스텀 탭바 (+ 광고 자리)
 │  └─ BannerAdPlaceholder.tsx · BookCover.tsx · GrowthBadge.tsx(작은 나무 그림)
 ├─ features/
-│  ├─ auth/useAuth.ts       # Supabase 익명/카카오/구글 로그인 훅 (미설정 시 게스트)
+│  ├─ auth/                 # 로그인 게이트: useAuth(세션 리스너 · 카카오/구글/이메일 로그인) · authStore(게이트 상태 · 아이디 저장/자동 로그인) · validation · legal(약관 초안) · AuthUI
 │  ├─ books/                # 검색/상세 쿼리 훅(상세 정보로 서재 기록 자동 보강), 검색 결과 아이템
 │  ├─ forest/               # TreeGraphic(SVG 나무), AnimatedTree(흔들림·성장 애니메이션), ForestGarden(아이소메트릭 숲·옮겨 심기),
 │  │                        #   layout(칸 배치·이동·교환), DirtBurst(흙 애니메이션), species(나무 종류 목록), GrowthCelebration,
@@ -366,7 +375,7 @@ vercel.json                 # 빌드 설정, /api 제외 SPA 리라이트, 함�
   - 읽고 싶은 책: 기대지수(하트) · 기대평
   - 중단한 책: 시작/중단일 · 별점 · 한줄평
 - **서재**: 상태별 탭 + 개수, 정렬(최신 저장순/오래된 저장순/최근 수정순/제목순/평점순), 진행률 바(% · 현재/전체 쪽), 수정·삭제, 진행률 빠른 업데이트(100% 도달 시 자동 완독 처리)
-- **인증**: Supabase 설정 시 익명/카카오/구글 로그인 + 서재 동기화, 미설정 시 로컬 게스트 프로필
+- **인증**: Supabase 설정 시 로그인 화면 먼저(카카오 · 구글 · 이메일+비밀번호, 회원가입 · 비밀번호 찾기) + 서재 동기화, 미설정 시 로컬 게스트 프로필
 - **요금제 게이팅**: `entitlements` 모듈(`isPremium`, 기본 무료) + 무료 사용자에게만 하단 광고 자리 표시
 
 ## 🗺️ 로드맵

@@ -9,7 +9,7 @@ import { AppText, Button, Card, IconButton, ProgressBar, Screen, showToast } fro
 import { CritterIcon } from '@/features/forest/CritterLayer';
 import { CRITTERS, effectiveCritters, PREMIUM_CRITTERS, toggleCritter } from '@/features/forest/critters';
 import { ForestGarden } from '@/features/forest/ForestGarden';
-import { layoutGarden, type Tile } from '@/features/forest/layout';
+import { expandGarden, layoutGarden, shrinkGarden, type GardenResize, type Tile } from '@/features/forest/layout';
 import { treeFromEntry } from '@/features/forest/model';
 import { ShareForestSheet } from '@/features/forest/ShareForestSheet';
 import { SpeciesSheet } from '@/features/forest/SpeciesSheet';
@@ -44,7 +44,6 @@ export default function HomeScreen() {
   const [shareOpen, setShareOpen] = useState(false);
   const [editing, setEditing] = useState(false);
   const gardenExtra = useForestStore((s) => s.gardenExtra);
-  const expandGarden = useForestStore((s) => s.expandGarden);
   const setGardenExtra = useForestStore((s) => s.setGardenExtra);
   const plantTrees = useLibraryStore((s) => s.plantTrees);
   const forestName = useProfileStore((s) => s.forestName);
@@ -56,6 +55,15 @@ export default function HomeScreen() {
 
   const trees = useMemo(() => Object.values(entriesMap).map((e) => treeFromEntry(e, isPremium)), [entriesMap, isPremium]);
   const currentPositions = useMemo(() => layoutGarden(trees, gardenExtra).positions, [trees, gardenExtra]);
+  const grow = useMemo(() => expandGarden(trees, gardenExtra), [trees, gardenExtra]);
+  const shrink = useMemo(() => shrinkGarden(trees, gardenExtra), [trees, gardenExtra]);
+  /** 땅 넓히기 / 땅 좁히기: pins every tree first so the far edge is the only thing that changes. */
+  const resizeGarden = (next: GardenResize | null, toast: 'forest.expanded' | 'forest.shrunk') => {
+    if (!next) return;
+    plantTrees(next.positions);
+    setGardenExtra(next.extra);
+    showToast(t(toast));
+  };
   const editChanged =
     !!editStart &&
     (editStart.extra !== gardenExtra ||
@@ -121,18 +129,31 @@ export default function HomeScreen() {
         </View>
         {editing ? (
           <View style={styles.editRow}>
-            <Button
-              size="sm"
-              variant="soft"
-              label={`➕ ${t('forest.expand')}`}
-              onPress={() => {
-                tapFeedback();
-                expandGarden();
-                showToast(t('forest.expanded'));
-              }}
-            />
-            <Button size="sm" variant="soft" label={`↩️ ${t('forest.reset')}`} disabled={!editChanged} onPress={resetEditing} />
-            <Button size="sm" label={t('forest.transplantDone')} onPress={finishEditing} />
+            <View style={styles.landGroup}>
+              <AppText variant="caption" muted>
+                {t('forest.landSize')}
+              </AppText>
+              <Button
+                size="sm"
+                variant="soft"
+                label="➕"
+                accessibilityLabel={t('forest.expand')}
+                disabled={!grow}
+                onPress={() => resizeGarden(grow, 'forest.expanded')}
+              />
+              <Button
+                size="sm"
+                variant="soft"
+                label="➖"
+                accessibilityLabel={t('forest.shrink')}
+                disabled={!shrink}
+                onPress={() => resizeGarden(shrink, 'forest.shrunk')}
+              />
+            </View>
+            <View style={styles.editActions}>
+              <Button size="sm" variant="soft" label={`↩️ ${t('forest.reset')}`} disabled={!editChanged} onPress={resetEditing} />
+              <Button size="sm" label={t('forest.transplantDone')} onPress={finishEditing} />
+            </View>
           </View>
         ) : null}
 
@@ -293,7 +314,16 @@ const styles = StyleSheet.create({
   forest: { paddingVertical: spacing.md, gap: spacing.sm, overflow: 'hidden' },
   forestHeader: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, paddingHorizontal: spacing.lg },
   weatherRow: { flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'center', gap: spacing.xs, paddingHorizontal: spacing.md },
-  editRow: { flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'flex-end', gap: spacing.xs, paddingHorizontal: spacing.lg },
+  editRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: spacing.xs,
+    paddingHorizontal: spacing.lg,
+  },
+  landGroup: { flexDirection: 'row', alignItems: 'center', gap: spacing.xs },
+  editActions: { flexDirection: 'row', alignItems: 'center', gap: spacing.xs, marginLeft: 'auto' },
   critterChip: { flexDirection: 'row', alignItems: 'center', gap: 3, paddingHorizontal: spacing.sm },
   weatherChip: {
     paddingHorizontal: spacing.md,

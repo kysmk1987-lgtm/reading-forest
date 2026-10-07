@@ -9,6 +9,27 @@ const key = process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY || process.env.EXPO_PUBLIC
 /** When false the app runs fully local (guest profile + on-device library + demo forest). */
 export const isSupabaseConfigured = Boolean(url && key);
 
+/** Public Auth settings (`/auth/v1/settings`): which providers are enabled, whether e-mail confirmation is off. */
+export interface AuthServerSettings {
+  external?: Record<string, boolean>;
+  disable_signup?: boolean;
+  mailer_autoconfirm?: boolean;
+}
+
+let settingsRequest: Promise<AuthServerSettings | null> | null = null;
+
+export function fetchAuthSettings(): Promise<AuthServerSettings | null> {
+  if (!isSupabaseConfigured) return Promise.resolve(null);
+  settingsRequest ??= fetch(`${url}/auth/v1/settings`, { headers: { apikey: key! } })
+    .then((res) => (res.ok ? (res.json() as Promise<AuthServerSettings>) : null))
+    .catch(() => null)
+    .then((settings) => {
+      if (!settings) settingsRequest = null;
+      return settings;
+    });
+  return settingsRequest;
+}
+
 let client: SupabaseClient | null = null;
 
 export function getSupabase(): SupabaseClient | null {

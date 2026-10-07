@@ -9,11 +9,11 @@ const check = (k, v, extra) => { report.checks[k] = !!v; console.log(`${v ? 'PAS
 const P = await openBrowser('K', { base: BASE, out: OUT });
 try {
   await P.visit('/search', 7000);
-  check('search: 교보문고 베스트셀러 title', await P.waitFor('교보문고 베스트셀러', 10000));
+  check('search: 독서의숲 베스트셀러 title', await P.waitFor('독서의숲 베스트셀러', 10000));
   const n = await P.evaluate(`document.querySelector('[data-testid="bestsellers"]')?.querySelectorAll('[role=button]').length ?? 0`);
   check('search: 20 ranked books', n === 20, `${n}`);
-  const caption = await P.evaluate(`document.querySelector('[data-testid="bestsellers-source"]')?.textContent ?? ''`);
-  check('search: 출처 caption with 기준일', /출처: 교보문고 · 2026\.\d{2}\.\d{2}~\d{2}\.\d{2} 기준/.test(caption), caption);
+  const attribution = await P.evaluate(`document.querySelector('[data-testid="bestsellers"]')?.textContent ?? ''`);
+  check('search: no source attribution', !/교보|출처/.test(attribution));
   await sleep(2500);
   const covers = await P.evaluate(`[...document.querySelectorAll('[data-testid="bestsellers"] img')].map(i => ({ ok: i.complete && i.naturalWidth > 0, src: i.src.slice(0, 60) }))`);
   check('search: Kyobo covers load', covers.length >= 6 && covers.slice(0, 6).every((c) => c.ok), `${covers.filter((c) => c.ok).length}/${covers.length}`);
@@ -41,7 +41,7 @@ try {
   }
   // a Kyobo bestseller opened from the search grid
   await P.visit('/search', 6000);
-  await P.waitFor('교보문고 베스트셀러', 10000);
+  await P.waitFor('독서의숲 베스트셀러', 10000);
   await P.clickAt(await P.rectOf(`document.querySelector('[data-testid="bestsellers"] [role=button]')`));
   await sleep(5000);
   await P.clickEnds('서재에 담기');

@@ -55,6 +55,8 @@ interface LibraryState {
   mergeRemote: (remote: { entries: LibraryEntry[]; logs: ReadingLog[] }) => void;
   /** 옮겨 심기: saves garden tiles (only entries whose tile changed are touched). */
   plantTrees: (positions: Record<string, Tile>) => void;
+  /** Drops the on-device copy without syncing deletes (used when a different account signs in). */
+  clearLocal: () => void;
 }
 
 interface PersistedV0 {
@@ -132,6 +134,7 @@ export const useLibraryStore = create<LibraryState>()(
         set({ entries });
         changed.forEach((entry) => emit({ type: 'upsert', entry, logs: [] }));
       },
+      clearLocal: () => set({ entries: {}, logs: [] }),
     }),
     {
       name: 'rf-library',
