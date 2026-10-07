@@ -103,7 +103,7 @@ node scripts/e2e/e2e-live-s6c.mjs   # 배포 사이트 헤드리스 점검 (Edge
 ## 9. 스크립트
 | 명령 / 파일 | 설명 |
 | --- | --- |
-| `새PC설정.bat` / `scripts/setup-new-pc.ps1` | 새 PC 한 번에 설정 (설치 · 로그인 · npm ci · Vercel 연결 · `.env.local`) |
+| `새PC설정.bat` / `scripts/setup-new-pc.ps1` | 새 PC 한 번에 설정 (설치 · 로그인 · npm ci · Vercel 연결 · `.env.local`). 저장소가 없을 때는 README "다른 PC에서 이어서 작업하기"의 한 줄 명령. ps1은 **BOM 있는 UTF-8 + CRLF**로 유지할 것(PowerShell 5.1 한글) |
 | `npm run build:sql` | `supabase/migrations` → `setup*.sql` 생성 |
 | `npm run generate:sound` · `generate:icons` | 효과음(WAV) · 앱 아이콘 생성 |
 | `scripts/generate-ambient.mjs` · `generate-korea-map.mjs` | 백색소음 · 한국 지도 데이터 생성 |

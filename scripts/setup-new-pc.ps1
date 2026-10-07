@@ -2,7 +2,9 @@
 #
 # 사용법 (셋 중 아무거나):
 #   1) 저장소 폴더의 '새PC설정.bat' 더블클릭
-#   2) PowerShell에서:  irm https://raw.githubusercontent.com/kysmk1987-lgtm/reading-forest/main/scripts/setup-new-pc.ps1 | iex
+#   2) PowerShell에서 (저장소가 아직 없을 때):
+#      iex ((irm https://raw.githubusercontent.com/kysmk1987-lgtm/reading-forest/main/scripts/setup-new-pc.ps1).TrimStart([char]0xFEFF))
+#      이 파일은 Windows PowerShell 5.1이 한글을 읽도록 BOM이 있는 UTF-8로 저장합니다. 위 명령은 그 BOM을 떼고 실행합니다.
 #   3) powershell -ExecutionPolicy Bypass -File scripts\setup-new-pc.ps1 [-DryRun] [-Path <폴더>]
 #
 # 하는 일: Git · Node.js LTS · GitHub CLI 설치(없을 때만, winget) → GitHub 로그인 → 저장소 받기(없을 때만)

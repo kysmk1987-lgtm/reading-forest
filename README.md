@@ -30,8 +30,9 @@
 2. **설정 스크립트 실행** (둘 중 하나)
    - 저장소가 아직 없으면: 시작 메뉴에서 **PowerShell**을 열고 아래 한 줄을 붙여넣은 뒤 Enter
      ```powershell
-     irm https://raw.githubusercontent.com/kysmk1987-lgtm/reading-forest/main/scripts/setup-new-pc.ps1 | iex
+     iex ((irm https://raw.githubusercontent.com/kysmk1987-lgtm/reading-forest/main/scripts/setup-new-pc.ps1).TrimStart([char]0xFEFF))
      ```
+     (`irm … | iex`로 실행해도 되지만, 파일 맨 앞의 UTF-8 표시(BOM) 때문에 빨간 오류 한 줄이 먼저 보일 수 있어요. 위 명령은 그걸 지우고 실행합니다.)
    - 이미 받아 둔 저장소 폴더가 있으면: 폴더 안의 **`새PC설정.bat`을 더블클릭**
    
    스크립트가 Git · Node.js · GitHub CLI를 (없으면) 설치하고, GitHub · Vercel 로그인(브라우저가 열리면 **기존과 같은 계정**으로 승인), 저장소 받기(`문서\GitHub\book`), `npm ci`, Vercel 프로젝트 연결, 개발용 환경 변수(`.env.local`) 받기까지 차례로 해 줍니다. 중간에 멈추면 메시지대로 해결하고 다시 실행하면 이어서 진행돼요.
