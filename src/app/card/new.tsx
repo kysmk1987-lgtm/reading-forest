@@ -4,6 +4,7 @@ import { useMemo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Pressable, StyleSheet, Switch, View, useWindowDimensions } from 'react-native';
 
+import { StackTabBar } from '@/components/ForestTabBar';
 import { AppText, Button, Card, Chip, IconButton, Input, Screen, SegmentedControl, showToast } from '@/components/ui';
 import { cardProgress } from '@/features/gallery/blur';
 import { captureView, makeBlurThumb, saveImage, shareImage } from '@/features/gallery/capture';
@@ -174,7 +175,8 @@ export default function CardMakerScreen() {
     <Screen
       title={t('cards.title')}
       subtitle={t('cards.subtitle')}
-      headerLeft={<IconButton name="chevron-back" accessibilityLabel={t('common.back')} onPress={() => (router.canGoBack() ? router.back() : router.dismissTo('/gallery'))} />}>
+      headerLeft={<IconButton name="chevron-back" accessibilityLabel={t('common.back')} onPress={() => (router.canGoBack() ? router.back() : router.dismissTo('/gallery'))} />}
+      footer={<StackTabBar />}>
       <Card style={styles.section}>
         <AppText variant="subtitle">📚 {t('cards.pickBook')}</AppText>
         {books.length ? (

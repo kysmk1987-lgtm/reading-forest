@@ -2,6 +2,7 @@ import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
 
 import { DEFAULT_CRITTERS, normalizeCritters, type CritterKind } from '@/features/forest/critters';
+import { GARDEN_LIMIT, GARDEN_MIN } from '@/features/forest/layout';
 import type { Weather } from '@/features/forest/WeatherLayer';
 import { persistStorage } from '@/lib/storage';
 
@@ -23,14 +24,16 @@ interface ForestState {
   /** Little creatures wandering at the front of the garden (any combination, empty = nobody). */
   critters: CritterKind[];
   setCritters: (critters: CritterKind[]) => void;
-  /** Extra rows/columns of empty land beyond the automatic size (땅 넓히기 / 땅 좁히기, no upper limit). */
+  /** Extra rows/columns of empty land beyond the automatic size (땅 넓히기 / 땅 좁히기, the garden stops at `GARDEN_LIMIT`). */
   gardenExtra: number;
   setGardenExtra: (extra: number) => void;
   /** Records a local watering; returns false if this forest was already watered on `day`. */
   waterLocal: (forestId: string, day: string) => boolean;
 }
 
-const cleanExtra = (extra: number) => (Number.isFinite(extra) ? Math.max(0, Math.floor(extra)) : 0);
+/** More extra than this can never show: even the smallest automatic garden (3×3) reaches 20×20 with it. */
+const MAX_EXTRA = GARDEN_LIMIT - GARDEN_MIN;
+const cleanExtra = (extra: unknown) => (typeof extra === 'number' && Number.isFinite(extra) ? Math.min(MAX_EXTRA, Math.max(0, Math.floor(extra))) : 0);
 
 export const useForestStore = create<ForestState>()(
   persist(
@@ -55,7 +58,7 @@ export const useForestStore = create<ForestState>()(
     {
       name: 'rf-forest',
       storage: persistStorage,
-      version: 1,
+      version: 2,
       migrate: (persisted, version) => {
         const state = (persisted ?? {}) as Partial<ForestState> & { critter?: unknown };
         // v1: one critter (`critter: 'butterfly' | 'none' | …`) → any combination (`critters: [...]`).
@@ -63,6 +66,8 @@ export const useForestStore = create<ForestState>()(
           state.critters = normalizeCritters(state.critter ?? DEFAULT_CRITTERS);
           delete state.critter;
         }
+        // v2: 땅 넓히기 is capped at 20×20; saved tree tiles are untouched (the layout keeps far-out trees).
+        if (version < 2) state.gardenExtra = cleanExtra(state.gardenExtra);
         return state as ForestState;
       },
     },

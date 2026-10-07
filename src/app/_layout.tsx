@@ -60,6 +60,7 @@ export default function RootLayout() {
               </Stack.Protected>
               <Stack.Screen name="forest/[slug]" />
               <Stack.Screen name="auth/callback" />
+              <Stack.Screen name="auth/confirmed" />
               <Stack.Screen name="auth/reset" />
             </Stack>
             {signedIn ? (

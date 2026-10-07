@@ -163,6 +163,7 @@ npx vercel --prod --yes                                                         
 앱은 열면 **로그인 화면부터** 보여줍니다(카카오 · 구글 · 이메일+비밀번호). 아래 설정이 없는 로그인 방법은 버튼을 눌렀을 때 "준비 중" 안내가 나옵니다.
 1. **Authentication → Sign In / Providers → Anonymous sign-ins** 켜기 (로그인하지 않은 방문자가 공유받은 숲에 물을 줄 때 사용)
    - **Email** 공급자 켜기(기본 켜짐). **Confirm email**은 켜도 꺼도 됩니다 — 켜면 가입 후 "인증 메일을 보냈어요" 화면이 나오고, 끄면 바로 로그인됩니다. 기본 메일 발송은 시간당 몇 통으로 제한되므로 실제 운영에서는 **SMTP 설정**(Authentication → Emails)을 권장합니다.
+   - **한국어 메일 템플릿**: `supabase/templates/confirmation.html`(가입 인증) · `recovery.html`(비밀번호 재설정) + 제목 `subjects.json`. 대시보드 **Authentication → Emails → Templates**에 붙여넣거나, 개인 액세스 토큰으로 `node scripts/apply-auth-templates.mjs --apply`(제목 · 본문 4개 값만 바꿈). 보낸 사람 이름 "독서의숲"은 **커스텀 SMTP를 켜야** 바꿀 수 있습니다. 자세한 순서는 `docs/HANDOFF.md` 7장.
    - (권장) **Minimum password length** 8, **Password requirements**: 영문 + 숫자 — 앱에서도 같은 규칙으로 검사합니다.
 2. **카카오 로그인**
    - [Kakao Developers](https://developers.kakao.com) → 내 애플리케이션 → 앱 추가(이미 도서 검색용 앱이 있으면 그대로 사용 가능)
@@ -175,14 +176,15 @@ npx vercel --prod --yes                                                         
 4. **Authentication → URL Configuration**
    - **Site URL**: `https://reading-forest-nine.vercel.app`
    - **Redirect URLs**: `https://reading-forest-nine.vercel.app/**`, `http://localhost:8081/**`, `readingforest://**`, (Vercel 미리보기 주소를 쓰려면) `https://*-kysmk1987-8120s-projects.vercel.app/**`
-   - 앱이 쓰는 주소: OAuth · 가입 인증 메일 → `/auth/callback`, 비밀번호 재설정 메일 → `/auth/reset` (위 `/**` 패턴에 포함됨)
+   - 앱이 쓰는 주소: OAuth → `/auth/callback`, 가입 인증 메일 → `/auth/confirmed`(인증 후 로그인 화면 + "인증 완료" 안내), 비밀번호 재설정 메일 → `/auth/reset` (위 `/**` 패턴에 포함됨)
 
 ### 4) 앱에 연결
 Vercel → Project → Settings → Environment Variables(Production/Preview/Development)와 로컬 `.env.local`에 `EXPO_PUBLIC_SUPABASE_URL`, `EXPO_PUBLIC_SUPABASE_ANON_KEY`를 넣고 다시 배포합니다.
 
 ### 동작 방식
-- **로그인 화면 먼저(로그인 게이트)**: 루트 레이아웃의 `Stack.Protected`가 로그인하지 않았거나 익명 세션뿐이면 `(auth)` 화면(`/login` · `/signup` · `/forgot-password`)만 열어 줍니다. 공유 숲(`/forest/…`), `/auth/callback`, `/auth/reset`은 로그인 없이 열립니다. Supabase 환경 변수가 없으면(로컬 모드) 게이트 없이 바로 앱이 열리고, `EXPO_PUBLIC_AUTH_GATE=false`로 개발 중 게이트를 끌 수 있습니다(예전처럼 익명 세션으로 사용).
+- **로그인 화면 먼저(로그인 게이트)**: 루트 레이아웃의 `Stack.Protected`가 로그인하지 않았거나 익명 세션뿐이면 `(auth)` 화면(`/login` · `/signup` · `/forgot-password`)만 열어 줍니다. 공유 숲(`/forest/…`), `/auth/callback`, `/auth/confirmed`, `/auth/reset`은 로그인 없이 열립니다. Supabase 환경 변수가 없으면(로컬 모드) 게이트 없이 바로 앱이 열리고, `EXPO_PUBLIC_AUTH_GATE=false`로 개발 중 게이트를 끌 수 있습니다(예전처럼 익명 세션으로 사용).
 - **이 기기 기록 → 계정 연결**: 게스트/익명으로 쓰던 이 기기의 서재·독서 로그는 처음 로그인(또는 가입)한 계정으로 업로드되어 서버의 기록과 합쳐집니다(같은 책은 최근 수정본 우선). 이후 변경은 바로바로 서버에 저장(write-through), 다른 기기에서 로그인하면 내려받습니다. **다른 계정**이 같은 기기에서 로그인하면 이전 계정의 기기 사본은 지우고(서버에는 남아 있음) 새 계정 기록을 내려받습니다(`profiles` 스토어의 `dataOwner`).
+- **다른 기기에서 같은 계정**: 서재 · 독서 로그 · 나무 위치(테이블), 닉네임 · 숲 이름 · 캐릭터(`profiles`), 숲 꾸미기(날씨 · 숲 친구 · 땅 넓히기) · 설정(효과음 · 갤러리 블러 · 한줄평 공개 범위)(Auth `user_metadata.rf_prefs`, 더 최근 쪽 우선), 공개 숲 링크, 갤러리에 올린 카드(결산 '만든 카드')가 내려옵니다. 다른 기기에서 지운 책은 다음 동기화 때 이 기기에서도 사라집니다(`rf-sync-meta`).
 - **카카오/구글 로그인**: 웹은 카카오 페이지로 이동했다가 `/auth/callback`으로 돌아옵니다. 앱(iOS/Android)은 인앱 브라우저(expo-web-browser) + `readingforest://auth/callback` 딥링크로 처리합니다. 누르기 전에 `/auth/v1/settings`로 공급자가 켜져 있는지 확인해서, 꺼져 있으면 Supabase 오류 페이지 대신 "준비 중" 안내를 보여줍니다.
 - **이메일 가입**: 이메일 · 닉네임(2~16자) · 비밀번호(영문+숫자 8자 이상) · 확인 + 필수 동의 2개(서비스 이용약관 · 개인정보 수집 및 이용, **문서는 초안** `src/features/auth/legal.ts`). 닉네임과 동의 시각 · 문서 버전은 `user_metadata`에 저장되고, 닉네임은 기존 트리거가 `profiles.nickname`에 넣습니다(별도 마이그레이션 없음).
 - **아이디 저장 · 자동 로그인**: 이 기기에만 저장(`rf-auth-prefs`). 자동 로그인을 끄면 앱/브라우저 탭을 새로 열 때 로그인 화면이 나옵니다.

@@ -55,7 +55,11 @@ export function Screen({
       <View style={styles.blobA} />
       <View style={styles.blobB} />
       {scroll ? (
-        <ScrollView contentContainerStyle={padding} keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false}>
+        <ScrollView
+          contentContainerStyle={padding}
+          keyboardShouldPersistTaps="handled"
+          automaticallyAdjustKeyboardInsets
+          showsVerticalScrollIndicator={false}>
           {header}
           {children}
         </ScrollView>

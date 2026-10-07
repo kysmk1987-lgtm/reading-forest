@@ -1,30 +1,38 @@
 import Ionicons from '@expo/vector-icons/Ionicons';
-import { router } from 'expo-router';
+import { router, useLocalSearchParams } from 'expo-router';
 import { useEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { StyleSheet, View, type TextInput } from 'react-native';
 
 import { AppText, Button, showToast } from '@/components/ui';
-import { authPrefsHydrated, useAuthPrefs, useAuthStore } from '@/features/auth/authStore';
-import { AuthLayout, CheckRow, Divider, Field, Notice, PasswordField, TextLink, useAuthText } from '@/features/auth/AuthUI';
+import { authPrefsHydrated, useAuthPrefs } from '@/features/auth/authStore';
+import { AuthLayout, CheckRow, Divider, Field, Notice, PasswordField, SocialButtons, TextLink, useAuthText } from '@/features/auth/AuthUI';
+import { useMailCooldown } from '@/features/auth/cooldown';
 import { useAuthActions, type AuthOutcome, type OAuthProvider } from '@/features/auth/useAuth';
 import { normalizeEmail, validateEmail, type FieldError } from '@/features/auth/validation';
 import { colors, spacing } from '@/theme';
+
+/** `/login?notice=confirmed` after the sign-up mail link, `confirmExpired` when that link was stale. */
+type LoginNotice = 'confirmed' | 'confirmExpired';
 
 export default function LoginScreen() {
   const { t } = useTranslation();
   const auth = useAuthActions();
   const { failureText, fieldText } = useAuthText();
-  const hasAnonymous = useAuthStore((s) => s.hasAnonymousSession);
+  const params = useLocalSearchParams<{ notice?: string; email?: string }>();
   const prefs = useAuthPrefs();
   const passwordRef = useRef<TextInput>(null);
 
-  const [email, setEmail] = useState('');
+  const [email, setEmail] = useState(typeof params.email === 'string' ? params.email : '');
   const [password, setPassword] = useState('');
   const [rememberEmail, setRememberEmail] = useState(prefs.rememberEmail);
   const [autoLogin, setAutoLogin] = useState(prefs.autoLogin);
   const [errors, setErrors] = useState<{ email?: FieldError | null; password?: FieldError | null }>({});
   const [failure, setFailure] = useState<{ outcome: AuthOutcome; provider?: OAuthProvider } | null>(null);
+  const [notice, setNotice] = useState<LoginNotice | null>(
+    params.notice === 'confirmed' || params.notice === 'confirmExpired' ? params.notice : null,
+  );
+  const resendLeft = useMailCooldown('confirm', email);
 
   useEffect(() => {
     let alive = true;
@@ -51,6 +59,7 @@ export default function LoginScreen() {
   };
 
   const submit = async () => {
+    if (busy) return;
     const next = { email: validateEmail(email), password: password ? null : ('passwordRequired' as const) };
     setErrors(next);
     setFailure(null);
@@ -61,6 +70,7 @@ export default function LoginScreen() {
   };
 
   const social = async (provider: OAuthProvider) => {
+    if (busy) return;
     setFailure(null);
     savePrefs();
     const outcome = provider === 'kakao' ? await auth.signInKakao() : await auth.signInGoogle();
@@ -73,10 +83,11 @@ export default function LoginScreen() {
     else showToast(t('auth.resent'));
   };
 
+  const needsConfirmation = failure?.outcome === 'emailNotConfirmed' || notice === 'confirmExpired';
+
   return (
     <AuthLayout
       title={t('auth.loginTitle')}
-      subtitle={t('auth.tagline')}
       footer={
         <View style={styles.footer}>
           <AppText variant="caption" muted>
@@ -85,7 +96,7 @@ export default function LoginScreen() {
           <TextLink label={t('auth.signUpLink')} onPress={() => router.push('/signup')} />
         </View>
       }>
-      {hasAnonymous ? <Notice tone="info" message={t('auth.anonymousNotice')} /> : null}
+      {notice ? <Notice tone={notice === 'confirmed' ? 'info' : 'error'} message={t(`auth.notices.${notice}`)} /> : null}
 
       <Field
         label={t('auth.email')}
@@ -112,6 +123,7 @@ export default function LoginScreen() {
         onChangeText={(v) => {
           setPassword(v);
           if (errors.password) setErrors((e) => ({ ...e, password: null }));
+          if (notice === 'confirmed') setNotice(null);
         }}
         placeholder={t('auth.passwordPlaceholder')}
         autoComplete="current-password"
@@ -127,35 +139,25 @@ export default function LoginScreen() {
         <CheckRow label={t('auth.autoLogin')} checked={autoLogin} onChange={setAutoLogin} />
       </View>
 
-      <Notice message={failure ? failureText(failure.outcome, failure.provider) : null} />
-      {failure?.outcome === 'emailNotConfirmed' ? (
-        <Button size="sm" variant="soft" label={t('auth.resend')} loading={auth.pending === 'resend'} onPress={resend} />
+      <Notice message={failure ? failureText(failure.outcome, failure.provider, resendLeft) : null} />
+      {needsConfirmation && !validateEmail(email) ? (
+        <Button
+          size="sm"
+          variant="soft"
+          label={resendLeft ? t('auth.resendIn', { seconds: resendLeft }) : t('auth.resend')}
+          loading={auth.pending === 'resend'}
+          disabled={resendLeft > 0 || busy}
+          onPress={resend}
+        />
       ) : null}
 
       <Button label={t('auth.login')} size="lg" fullWidth loading={auth.pending === 'email'} disabled={busy} onPress={submit} />
-      <View style={styles.forgot}>
-        <TextLink label={t('auth.forgot')} onPress={() => router.push('/forgot-password')} small />
+      <View style={styles.center}>
+        <TextLink label={t('auth.forgot')} onPress={() => router.push({ pathname: '/forgot-password', params: email ? { email } : {} })} small />
       </View>
 
       <Divider label={t('auth.or')} />
-      <Button
-        label={t('auth.kakao')}
-        variant="kakao"
-        fullWidth
-        icon={<Ionicons name="chatbubble" size={18} color="#3C1E1E" />}
-        loading={auth.pending === 'kakao'}
-        disabled={busy}
-        onPress={() => social('kakao')}
-      />
-      <Button
-        label={t('auth.google')}
-        variant="soft"
-        fullWidth
-        icon={<Ionicons name="logo-google" size={18} color="#4285F4" />}
-        loading={auth.pending === 'google'}
-        disabled={busy}
-        onPress={() => social('google')}
-      />
+      <SocialButtons pending={auth.pending === 'kakao' || auth.pending === 'google' ? auth.pending : null} disabled={busy} onPress={social} />
       <AppText variant="tiny" muted center>
         {t('auth.socialHint')}
       </AppText>
@@ -165,6 +167,6 @@ export default function LoginScreen() {
 
 const styles = StyleSheet.create({
   options: { flexDirection: 'row', flexWrap: 'wrap', columnGap: spacing.lg, rowGap: spacing.xs },
-  forgot: { alignItems: 'center' },
+  center: { alignItems: 'center' },
   footer: { flexDirection: 'row', justifyContent: 'center', alignItems: 'center', gap: spacing.sm },
 });

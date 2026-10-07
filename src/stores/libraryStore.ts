@@ -57,6 +57,8 @@ interface LibraryState {
   plantTrees: (positions: Record<string, Tile>) => void;
   /** Drops the on-device copy without syncing deletes (used when a different account signs in). */
   clearLocal: () => void;
+  /** Removes entries (and their logs) that were deleted on another device, without emitting deletes. */
+  dropLocal: (ids: string[]) => void;
 }
 
 interface PersistedV0 {
@@ -135,6 +137,14 @@ export const useLibraryStore = create<LibraryState>()(
         changed.forEach((entry) => emit({ type: 'upsert', entry, logs: [] }));
       },
       clearLocal: () => set({ entries: {}, logs: [] }),
+      dropLocal: (ids) => {
+        if (!ids.length) return;
+        const gone = new Set(ids);
+        set((s) => ({
+          entries: Object.fromEntries(Object.entries(s.entries).filter(([id]) => !gone.has(id))),
+          logs: s.logs.filter((l) => !gone.has(l.entryId)),
+        }));
+      },
     }),
     {
       name: 'rf-library',

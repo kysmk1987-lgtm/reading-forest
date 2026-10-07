@@ -9,9 +9,11 @@ import {
   entryToRow,
   logToRow,
   planUpload,
+  reconcileDeletes,
   rowToEntry,
   rowToLog,
 } from '../src/features/library/syncMapping';
+import { parsePrefs, reconcilePrefs, type PrefsValues } from '../src/features/library/accountPrefs';
 import type { LibraryEntry, ReadingLog } from '../src/types';
 
 const USER = '00000000-0000-4000-8000-000000000001';
@@ -114,6 +116,46 @@ test('planUpload sends guest-only and newer entries plus their missing logs', ()
   );
   assert.deepEqual(plan.entries.map((e) => e.id), ['old', 'guest']);
   assert.deepEqual(plan.logs.map((l) => l.id), ['a']);
+});
+
+test('reconcileDeletes: drops entries deleted on another device, retries offline deletes', () => {
+  const plan = reconcileDeletes(['kept', 'deletedElsewhere', 'newHere'], ['kept', 'pendingHere'], ['kept', 'deletedElsewhere'], ['pendingHere', 'pendingHere']);
+  assert.deepEqual(plan.dropLocal, ['deletedElsewhere']);
+  assert.deepEqual(plan.deleteRemote, ['pendingHere']);
+  // A first sync (nothing known yet) never drops anything.
+  assert.deepEqual(reconcileDeletes(['a'], [], [], []).dropLocal, []);
+});
+
+const defaults: PrefsValues = {
+  forest: { weather: 'clear', critters: ['butterfly'], gardenExtra: 0 },
+  settings: { soundEnabled: true, blurUnownedQuotes: false, reviewVisibility: 'public' },
+  look: { forestName: '', avatar: 'sprout' },
+};
+
+test('parsePrefs cleans user_metadata.rf_prefs', () => {
+  assert.equal(parsePrefs(undefined), null);
+  const parsed = parsePrefs({
+    updatedAt: 5,
+    forest: { weather: 'storm', critters: ['frog', 'unicorn'], gardenExtra: 3.7 },
+    settings: { soundEnabled: false, reviewVisibility: 'private' },
+    look: { forestName: '  나의 숲  ', avatar: 'cat' },
+  });
+  assert.deepEqual(parsed, {
+    v: 1,
+    updatedAt: 5,
+    forest: { weather: 'clear', critters: ['frog'], gardenExtra: 3 },
+    settings: { soundEnabled: false, blurUnownedQuotes: false, reviewVisibility: 'private' },
+    look: { forestName: '나의 숲', avatar: 'cat' },
+  });
+  assert.equal(parsePrefs({ look: { avatar: 'dragon' } })!.look.avatar, 'sprout');
+});
+
+test('reconcilePrefs: fresh device pulls, newer local pushes, no remote pushes', () => {
+  const remote = { v: 1 as const, updatedAt: 100, ...defaults, forest: { ...defaults.forest, weather: 'snow' as const } };
+  assert.equal(reconcilePrefs(defaults, 0, remote), 'pull');
+  assert.equal(reconcilePrefs(defaults, 200, remote), 'push');
+  assert.equal(reconcilePrefs(defaults, 0, null), 'push');
+  assert.equal(reconcilePrefs(remote, 0, remote), 'none');
 });
 
 console.log(`\nAll ${passed} sync mapping tests passed.`);

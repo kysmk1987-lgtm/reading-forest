@@ -5,6 +5,7 @@ import { useTranslation } from 'react-i18next';
 import { ActivityIndicator, Pressable, StyleSheet, View, useWindowDimensions } from 'react-native';
 
 import { BookCover } from '@/components/BookCover';
+import { StackTabBar } from '@/components/ForestTabBar';
 import { AppText, Button, Card, EmptyState, IconButton, Input, Screen, showToast } from '@/components/ui';
 import {
   addComment,
@@ -132,7 +133,8 @@ export default function CardDetailScreen() {
   return (
     <Screen
       title={t('gallery.detailTitle')}
-      headerLeft={<IconButton name="chevron-back" accessibilityLabel={t('common.back')} onPress={() => (router.canGoBack() ? router.back() : router.dismissTo('/gallery'))} />}>
+      headerLeft={<IconButton name="chevron-back" accessibilityLabel={t('common.back')} onPress={() => (router.canGoBack() ? router.back() : router.dismissTo('/gallery'))} />}
+      footer={<StackTabBar />}>
       {card.isLoading ? (
         <ActivityIndicator color={palette.leafDeep} />
       ) : !c ? (

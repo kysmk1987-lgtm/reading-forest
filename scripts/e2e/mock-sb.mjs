@@ -49,6 +49,8 @@ const sessions = new Map(); // refresh → uid
 // Email accounts (auto-confirmed unless MOCK_CONFIRM_EMAIL=1, then password login answers email_not_confirmed).
 const emailUsers = new Map(); // email → { id, password, meta, confirmed }
 const emailById = (uid) => [...emailUsers.entries()].find(([, u]) => u.id === uid);
+const anonMeta = new Map(); // anonymous uid → user_metadata
+const lastMail = new Map(); // `${kind}:${email}` → ms (GoTrue's per-address 60 s resend guard)
 function decode(token) {
   try { return JSON.parse(Buffer.from(token.split('.')[1], 'base64url').toString()); } catch { return null; }
 }
@@ -59,7 +61,7 @@ function userJson(uid) {
     const [email, u] = found;
     return { id: uid, aud: 'authenticated', role: 'authenticated', is_anonymous: false, email, phone: '', app_metadata: { provider: 'email', providers: ['email'] }, user_metadata: u.meta, identities: [{ id: uid, provider: 'email' }], created_at: now, updated_at: now };
   }
-  return { id: uid, aud: 'authenticated', role: 'authenticated', is_anonymous: true, email: '', phone: '', app_metadata: { provider: 'anonymous', providers: ['anonymous'] }, user_metadata: {}, identities: [], created_at: now, updated_at: now };
+  return { id: uid, aud: 'authenticated', role: 'authenticated', is_anonymous: true, email: '', phone: '', app_metadata: { provider: 'anonymous', providers: ['anonymous'] }, user_metadata: anonMeta.get(uid) ?? {}, identities: [], created_at: now, updated_at: now };
 }
 function session(uid) {
   const now = Math.floor(Date.now() / 1000);
@@ -293,10 +295,14 @@ const server = createServer(async (req, res) => {
     let out;
     if (url.pathname.startsWith('/auth/v1/')) {
       const p = url.pathname.slice(9);
-      const body = req.method === 'POST' ? JSON.parse(raw.toString() || '{}') : {};
+      const body = req.method === 'POST' || req.method === 'PUT' ? JSON.parse(raw.toString() || '{}') : {};
       if (p === 'signup' && req.method === 'POST' && body.email) {
         const email = String(body.email).toLowerCase();
-        if (emailUsers.has(email)) {
+        if (emailUsers.has(email) && process.env.MOCK_CONFIRM_EMAIL === '1') {
+          // Real GoTrue with confirmation on: fake success, obfuscated user without identities, no mail.
+          note(`signup existing ${email} → obfuscated`);
+          out = { status: 200, json: { ...userJson(emailUsers.get(email).id), id: randomUUID(), identities: [], user_metadata: {} } };
+        } else if (emailUsers.has(email)) {
           out = { status: 422, json: { code: 422, error_code: 'user_already_exists', msg: 'User already registered' } };
         } else {
           const id = randomUUID();
@@ -319,14 +325,35 @@ const server = createServer(async (req, res) => {
       } else if (p === 'settings') {
         out = { status: 200, json: { external: { email: true, anonymous_users: true, kakao: false, google: false }, disable_signup: false, mailer_autoconfirm: process.env.MOCK_CONFIRM_EMAIL !== '1' } };
       } else if (p === 'recover' || p === 'resend') {
-        note(`${p} ${body.email}`);
-        out = { status: 200, json: {} };
+        const key = `${p}:${String(body.email ?? '').toLowerCase()}`;
+        const wait = Math.ceil(60 - (Date.now() - (lastMail.get(key) ?? 0)) / 1000);
+        if (wait > 0) {
+          note(`${p} ${body.email} → 429 (${wait}s)`);
+          out = { status: 429, json: { code: 429, error_code: 'over_email_send_rate_limit', msg: `For security purposes, you can only request this after ${wait} seconds.` } };
+        } else {
+          lastMail.set(key, Date.now());
+          note(`${p} ${body.email}`);
+          out = { status: 200, json: {} };
+        }
       } else if (p === 'token' && url.searchParams.get('grant_type') === 'refresh_token') {
         const { refresh_token } = JSON.parse(raw.toString() || '{}');
         const id = sessions.get(refresh_token);
         out = id ? { status: 200, json: session(id) } : { status: 400, json: { error: 'invalid_grant', error_description: 'Invalid Refresh Token', code: 'refresh_token_not_found' } };
+      } else if (p === 'user' && req.method === 'PUT') {
+        if (!uid) out = { status: 401, json: { code: 401, msg: 'no user' } };
+        else {
+          // GoTrue merges `data` into user_metadata key by key.
+          const found = emailById(uid);
+          if (body.data) {
+            if (found) found[1].meta = { ...found[1].meta, ...body.data };
+            else anonMeta.set(uid, { ...(anonMeta.get(uid) ?? {}), ...body.data });
+          }
+          if (body.password && found) found[1].password = body.password;
+          note(`update user ${uid.slice(0, 8)} ${Object.keys(body.data ?? {}).join(',')}`);
+          out = { status: 200, json: userJson(uid) };
+        }
       } else if (p === 'user') {
-        out = uid ? { status: 200, json: session(uid).user } : { status: 401, json: { code: 401, msg: 'no user' } };
+        out = uid ? { status: 200, json: userJson(uid) } : { status: 401, json: { code: 401, msg: 'no user' } };
       } else if (p === 'logout') {
         out = { status: 204, json: null };
       } else {

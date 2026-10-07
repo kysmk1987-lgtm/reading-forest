@@ -87,7 +87,12 @@ export type AuthFailure =
   | 'userExists'
   | 'weakPassword'
   | 'samePassword'
+  /** Too many auth requests from this client (over_request_rate_limit / plain 429). */
   | 'rateLimited'
+  /** Same address mailed moments ago: "you can only request this after N seconds" (see `retryAfterSeconds`). */
+  | 'rateLimitedWait'
+  /** The project's hourly e-mail quota is used up (the built-in sender allows only a few mails per hour). */
+  | 'emailRateLimited'
   | 'emailDisabled'
   | 'signupDisabled'
   | 'providerDisabled'
@@ -120,8 +125,9 @@ export function classifyAuthError(error: unknown): AuthFailure {
     case 'same_password':
       return 'samePassword';
     case 'over_request_rate_limit':
-    case 'over_email_send_rate_limit':
       return 'rateLimited';
+    case 'over_email_send_rate_limit':
+      return retryAfterSeconds(error) ? 'rateLimitedWait' : 'emailRateLimited';
     case 'email_provider_disabled':
       return 'emailDisabled';
     case 'signup_disabled':
@@ -143,6 +149,31 @@ export function classifyAuthError(error: unknown): AuthFailure {
   if (message.includes('email not confirmed')) return 'emailNotConfirmed';
   if (message.includes('already registered')) return 'userExists';
   if (message.includes('provider is not enabled') || message.includes('unsupported provider')) return 'providerDisabled';
+  if (retryAfterSeconds(error)) return 'rateLimitedWait';
+  if (message.includes('email rate limit')) return 'emailRateLimited';
   if (e.status === 429) return 'rateLimited';
   return 'unknown';
+}
+
+/** Supabase's per-address resend guard: "For security purposes, you can only request this after 42 seconds." */
+export function retryAfterSeconds(error: unknown): number | null {
+  const message = String((error as { message?: string } | null)?.message ?? '');
+  const m = /after (\d+) seconds?/i.exec(message);
+  return m ? Math.max(1, Number(m[1])) : null;
+}
+
+/** Seconds the resend buttons stay locked after a mail went out (Supabase's default per-address limit is 60 s). */
+export const MAIL_COOLDOWN_SECONDS = 60;
+
+/**
+ * With e-mail confirmation on, signing up with an already registered (confirmed) address does not fail:
+ * Supabase answers with an obfuscated user whose `identities` is empty and sends no mail.
+ */
+export function signUpResponseKind(data: {
+  user: { identities?: unknown[] | null } | null;
+  session: unknown | null;
+}): 'exists' | 'signedIn' | 'needsConfirmation' {
+  if (data.session) return 'signedIn';
+  if (data.user && Array.isArray(data.user.identities) && data.user.identities.length === 0) return 'exists';
+  return 'needsConfirmation';
 }

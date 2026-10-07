@@ -216,6 +216,20 @@ export function rowToLog(row: ReadingLogRow): ReadingLog {
   return log;
 }
 
+/**
+ * Deletes across devices: an entry the server had confirmed before (`known`) but no longer returns was removed
+ * on another device → drop it here instead of uploading it again. Deletes made here while offline (`pending`)
+ * are retried, and the stale remote copy must not be merged back meanwhile.
+ */
+export function reconcileDeletes(localIds: Iterable<string>, remoteIds: Iterable<string>, known: Iterable<string>, pending: Iterable<string>) {
+  const remote = new Set(remoteIds);
+  const knownSet = new Set(known);
+  return {
+    dropLocal: [...localIds].filter((id) => knownSet.has(id) && !remote.has(id)),
+    deleteRemote: [...new Set(pending)].filter((id) => remote.has(id)),
+  };
+}
+
 /** What the first sync after sign-in has to upload so a guest's local data ends up in the account. */
 export function planUpload(
   local: { entries: LibraryEntry[]; logs: ReadingLog[] },

@@ -9,7 +9,7 @@ import { AppText, Button, Card, IconButton, ProgressBar, Screen, showToast } fro
 import { CritterIcon } from '@/features/forest/CritterLayer';
 import { CRITTERS, effectiveCritters, PREMIUM_CRITTERS, toggleCritter } from '@/features/forest/critters';
 import { ForestGarden } from '@/features/forest/ForestGarden';
-import { expandGarden, layoutGarden, shrinkGarden, type GardenResize, type Tile } from '@/features/forest/layout';
+import { expandGarden, GARDEN_LIMIT, layoutGarden, shrinkGarden, type GardenResize, type Tile } from '@/features/forest/layout';
 import { treeFromEntry } from '@/features/forest/model';
 import { ShareForestSheet } from '@/features/forest/ShareForestSheet';
 import { SpeciesSheet } from '@/features/forest/SpeciesSheet';
@@ -54,7 +54,8 @@ export default function HomeScreen() {
   const [editStart, setEditStart] = useState<{ positions: Record<string, Tile>; extra: number } | null>(null);
 
   const trees = useMemo(() => Object.values(entriesMap).map((e) => treeFromEntry(e, isPremium)), [entriesMap, isPremium]);
-  const currentPositions = useMemo(() => layoutGarden(trees, gardenExtra).positions, [trees, gardenExtra]);
+  const currentLayout = useMemo(() => layoutGarden(trees, gardenExtra), [trees, gardenExtra]);
+  const currentPositions = currentLayout.positions;
   const grow = useMemo(() => expandGarden(trees, gardenExtra), [trees, gardenExtra]);
   const shrink = useMemo(() => shrinkGarden(trees, gardenExtra), [trees, gardenExtra]);
   /** 땅 넓히기 / 땅 좁히기: pins every tree first so the far edge is the only thing that changes. */
@@ -62,7 +63,7 @@ export default function HomeScreen() {
     if (!next) return;
     plantTrees(next.positions);
     setGardenExtra(next.extra);
-    showToast(t(toast));
+    showToast(toast === 'forest.expanded' && next.n >= GARDEN_LIMIT ? t('forest.expandedMax', { max: GARDEN_LIMIT }) : t(toast));
   };
   const editChanged =
     !!editStart &&
@@ -131,7 +132,7 @@ export default function HomeScreen() {
           <View style={styles.editRow}>
             <View style={styles.landGroup}>
               <AppText variant="caption" muted>
-                {t('forest.landSize')}
+                {t('forest.landSize')} {t('forest.landDims', { n: currentLayout.n })}
               </AppText>
               <Button
                 size="sm"
@@ -149,6 +150,11 @@ export default function HomeScreen() {
                 disabled={!shrink}
                 onPress={() => resizeGarden(shrink, 'forest.shrunk')}
               />
+              {grow ? null : (
+                <AppText variant="tiny" muted>
+                  {t('forest.landMax', { max: GARDEN_LIMIT })}
+                </AppText>
+              )}
             </View>
             <View style={styles.editActions}>
               <Button size="sm" variant="soft" label={`↩️ ${t('forest.reset')}`} disabled={!editChanged} onPress={resetEditing} />
@@ -322,7 +328,7 @@ const styles = StyleSheet.create({
     gap: spacing.xs,
     paddingHorizontal: spacing.lg,
   },
-  landGroup: { flexDirection: 'row', alignItems: 'center', gap: spacing.xs },
+  landGroup: { flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', gap: spacing.xs },
   editActions: { flexDirection: 'row', alignItems: 'center', gap: spacing.xs, marginLeft: 'auto' },
   critterChip: { flexDirection: 'row', alignItems: 'center', gap: 3, paddingHorizontal: spacing.sm },
   weatherChip: {

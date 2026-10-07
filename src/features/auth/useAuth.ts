@@ -4,11 +4,12 @@ import * as WebBrowser from 'expo-web-browser';
 import { useCallback, useEffect, useState } from 'react';
 import { Platform } from 'react-native';
 
-import { startLibrarySync } from '@/features/library/cloudSync';
+import { resetAccountPrefs, startLibrarySync } from '@/features/library/cloudSync';
 import { fetchAuthSettings, getSupabase, isSupabaseConfigured } from '@/lib/supabase';
 import { useCardsStore } from '@/stores/cardsStore';
 import { useLibraryStore } from '@/stores/libraryStore';
 import { isDefaultNickname, useProfileStore, type AuthMode } from '@/stores/profileStore';
+import { resetSyncMeta } from '@/stores/syncMetaStore';
 
 import {
   authPrefsHydrated,
@@ -19,15 +20,19 @@ import {
   useAuthPrefs,
   useAuthStore,
 } from './authStore';
+import { startMailCooldown, type MailKind } from './cooldown';
 import { LEGAL_VERSION } from './legal';
-import { classifyAuthError, normalizeEmail, type AuthFailure } from './validation';
+import { classifyAuthError, MAIL_COOLDOWN_SECONDS, normalizeEmail, retryAfterSeconds, signUpResponseKind, type AuthFailure } from './validation';
 
 WebBrowser.maybeCompleteAuthSession();
 
 export type OAuthProvider = 'kakao' | 'google';
 
-/** Where Supabase sends the user back to (must be listed in Supabase → Authentication → URL Configuration). */
-export function authRedirectUrl(path: 'auth/callback' | 'auth/reset' = 'auth/callback') {
+/**
+ * Where Supabase sends the user back to (must match Supabase → Authentication → URL Configuration → Redirect URLs):
+ * OAuth → `auth/callback`, sign-up confirmation → `auth/confirmed` (shows the login screen), password reset → `auth/reset`.
+ */
+export function authRedirectUrl(path: 'auth/callback' | 'auth/confirmed' | 'auth/reset' = 'auth/callback') {
   if (Platform.OS === 'web' && typeof window !== 'undefined') return `${window.location.origin}/${path}`;
   return Linking.createURL(path);
 }
@@ -67,12 +72,18 @@ function claimLocalData(uid: string) {
     useLibraryStore.getState().clearLocal();
     useCardsStore.getState().clearLocal();
     profile.resetIdentity();
+    resetAccountPrefs();
   }
+  resetSyncMeta();
   profile.setDataOwner(uid);
 }
 
+function webPath() {
+  return Platform.OS === 'web' && typeof window !== 'undefined' ? window.location.pathname : '';
+}
+
 function onAuthRoute() {
-  return Platform.OS === 'web' && typeof window !== 'undefined' && window.location.pathname.startsWith('/auth/');
+  return webPath().startsWith('/auth/');
 }
 
 /** Mount once at the root: keeps the gate status, profile store and library sync in step with Supabase Auth. */
@@ -96,12 +107,24 @@ export function useAuthListener() {
         auth.set({ recovering: true });
       }
       const permanent = !!session && !session.user.is_anonymous;
+      // The sign-up confirmation link may sign the browser in (same-browser PKCE exchange); the product wants the
+      // login screen after confirming, so drop that session before it claims the device's records.
+      if (permanent && isAuthGateEnabled && webPath() === '/auth/confirmed') {
+        await sb.auth.signOut({ scope: 'local' });
+        return; // SIGNED_OUT follows.
+      }
       if (event === 'INITIAL_SESSION' && permanent && isAuthGateEnabled && !onAuthRoute()) {
         await authPrefsHydrated();
         if (!useAuthPrefs.getState().autoLogin && !isSessionAlive()) {
           await sb.auth.signOut({ scope: 'local' });
           return; // SIGNED_OUT follows.
         }
+      }
+      if (permanent && syncedUser && syncedUser !== session.user.id) {
+        // Account changed without a sign-out in between: stop the old sync before the device data is handed over.
+        stopSync?.();
+        stopSync = null;
+        syncedUser = null;
       }
       if (permanent) claimLocalData(session.user.id);
       applySession(session);
@@ -185,6 +208,12 @@ export async function ensureSession(): Promise<string | null> {
   return res.data.user?.id ?? null;
 }
 
+/** Locks the resend button: a full minute after a sent mail, or whatever Supabase says is left after a refusal. */
+function lockAfterMail(kind: MailKind, email: string, error: unknown) {
+  const wait = error ? retryAfterSeconds(error) : MAIL_COOLDOWN_SECONDS;
+  if (wait) startMailCooldown(kind, email, wait);
+}
+
 export interface SignUpResult {
   failure: AuthOutcome;
   /** Supabase has e-mail confirmation on: no session yet, a confirmation mail was sent. */
@@ -237,21 +266,23 @@ export function useAuthActions() {
         async (): Promise<SignUpResult> => {
           markSessionAlive();
           const nickname = input.nickname.trim();
+          const email = normalizeEmail(input.email);
           const agreedAt = new Date().toISOString();
           const { data, error } = await getSupabase()!.auth.signUp({
-            email: normalizeEmail(input.email),
+            email,
             password: input.password,
             options: {
-              emailRedirectTo: authRedirectUrl(),
+              emailRedirectTo: authRedirectUrl('auth/confirmed'),
               data: { nickname, terms_agreed_at: agreedAt, privacy_agreed_at: agreedAt, legal_version: LEGAL_VERSION },
             },
           });
           if (error) throw error;
-          // With confirmation on, an already-registered address returns a user without identities (no mail is sent).
-          if (!data.session && data.user && data.user.identities?.length === 0) return { failure: 'userExists' };
+          const kind = signUpResponseKind(data);
+          if (kind === 'exists') return { failure: 'userExists' };
           const { dataOwner, setNickname } = useProfileStore.getState();
           if (!dataOwner || dataOwner === data.user?.id) setNickname(nickname);
-          return { failure: null, needsConfirmation: !data.session };
+          if (kind === 'needsConfirmation') startMailCooldown('confirm', email, MAIL_COOLDOWN_SECONDS);
+          return { failure: null, needsConfirmation: kind === 'needsConfirmation' };
         },
         (failure) => ({ failure }),
       ),
@@ -263,7 +294,9 @@ export function useAuthActions() {
       run(
         'resend',
         async (): Promise<AuthOutcome> => {
-          const { error } = await getSupabase()!.auth.resend({ type: 'signup', email: normalizeEmail(email), options: { emailRedirectTo: authRedirectUrl() } });
+          const address = normalizeEmail(email);
+          const { error } = await getSupabase()!.auth.resend({ type: 'signup', email: address, options: { emailRedirectTo: authRedirectUrl('auth/confirmed') } });
+          lockAfterMail('confirm', address, error);
           if (error) throw error;
           return null;
         },
@@ -277,7 +310,9 @@ export function useAuthActions() {
       run(
         'reset',
         async (): Promise<AuthOutcome> => {
-          const { error } = await getSupabase()!.auth.resetPasswordForEmail(normalizeEmail(email), { redirectTo: authRedirectUrl('auth/reset') });
+          const address = normalizeEmail(email);
+          const { error } = await getSupabase()!.auth.resetPasswordForEmail(address, { redirectTo: authRedirectUrl('auth/reset') });
+          lockAfterMail('reset', address, error);
           if (error) throw error;
           return null;
         },

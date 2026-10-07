@@ -7,6 +7,8 @@ import assert from 'node:assert/strict';
 import {
   classifyAuthError,
   normalizeEmail,
+  retryAfterSeconds,
+  signUpResponseKind,
   validateConfirm,
   validateEmail,
   validateNewPassword,
@@ -60,8 +62,24 @@ assert.equal(classifyAuthError({ code: 'invalid_credentials', status: 400 }), 'i
 assert.equal(classifyAuthError({ message: 'Invalid login credentials', status: 400 }), 'invalidCredentials');
 assert.equal(classifyAuthError({ code: 'email_not_confirmed' }), 'emailNotConfirmed');
 assert.equal(classifyAuthError({ code: 'user_already_exists' }), 'userExists');
-assert.equal(classifyAuthError({ code: 'over_email_send_rate_limit', status: 429 }), 'rateLimited');
+assert.equal(classifyAuthError({ code: 'over_request_rate_limit', status: 429 }), 'rateLimited');
 assert.equal(classifyAuthError({ status: 429 }), 'rateLimited');
+// Per-address resend guard vs the project's hourly mail quota.
+const resendGuard = { code: 'over_email_send_rate_limit', status: 429, message: 'For security purposes, you can only request this after 42 seconds.' };
+assert.equal(classifyAuthError(resendGuard), 'rateLimitedWait');
+assert.equal(retryAfterSeconds(resendGuard), 42);
+assert.equal(classifyAuthError({ status: 429, message: 'For security purposes, you can only request this after 1 second.' }), 'rateLimitedWait');
+assert.equal(classifyAuthError({ code: 'over_email_send_rate_limit', status: 429, message: 'email rate limit exceeded' }), 'emailRateLimited');
+assert.equal(classifyAuthError({ status: 429, message: 'Email rate limit exceeded' }), 'emailRateLimited');
+assert.equal(retryAfterSeconds({ message: 'email rate limit exceeded' }), null);
+assert.equal(classifyAuthError({ message: 'User already registered', status: 422 }), 'userExists');
+assert.equal(classifyAuthError({ code: 'email_exists' }), 'userExists');
+
+// sign-up response: confirmation on + already registered → obfuscated user without identities
+assert.equal(signUpResponseKind({ user: { identities: [] }, session: null }), 'exists');
+assert.equal(signUpResponseKind({ user: { identities: [{ id: 'x' }] }, session: null }), 'needsConfirmation');
+assert.equal(signUpResponseKind({ user: { identities: [{ id: 'x' }] }, session: {} }), 'signedIn');
+assert.equal(signUpResponseKind({ user: {}, session: null }), 'needsConfirmation');
 assert.equal(classifyAuthError({ name: 'AuthRetryableFetchError', message: 'Failed to fetch', status: 0 }), 'network');
 assert.equal(classifyAuthError(new TypeError('Failed to fetch')), 'network');
 assert.equal(classifyAuthError({ message: 'Unsupported provider: provider is not enabled', status: 400 }), 'providerDisabled');

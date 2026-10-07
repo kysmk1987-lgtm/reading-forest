@@ -14,9 +14,14 @@ export interface Plantable {
 
 /**
  * Technical bound of a garden edge (tiles) and of `garden_x/garden_y` in the database (migration 0006).
- * 땅 넓히기 has no product limit; this only keeps coordinates sane.
+ * Only keeps coordinates sane; the product cap for 땅 넓히기 is `GARDEN_LIMIT`.
  */
 export const GARDEN_MAX = 1000;
+/**
+ * 땅 넓히기 stops at this edge (20×20). A garden can still be bigger when saved trees already stand further out
+ * (from before the cap) or when there are more trees than tiles — trees are never moved to enforce it.
+ */
+export const GARDEN_LIMIT = 20;
 /** The 0004 database check (`garden_x/garden_y between 0 and 11`) until migration 0006 is applied. */
 export const LEGACY_GARDEN_MAX = 12;
 export const GARDEN_MIN = 3;
@@ -47,13 +52,14 @@ export interface GardenLayout {
 
 /**
  * Trees with a saved tile keep it (oldest wins a clash); the rest fill free tiles from the centre.
- * `extra` widens the garden beyond the automatic size (땅 넓히기).
+ * `extra` widens the garden beyond the automatic size (땅 넓히기), up to `GARDEN_LIMIT`.
  */
 export function layoutGarden(trees: Plantable[], extra = 0): GardenLayout {
   const sorted = [...trees].sort((a, b) => a.createdAt - b.createdAt || (a.id < b.id ? -1 : 1));
   const pinned = sorted.filter((t) => validGardenCoord(t.gardenX) && validGardenCoord(t.gardenY));
   const furthest = pinned.reduce((m, t) => Math.max(m, t.gardenX! + 1, t.gardenY! + 1), 0);
-  let n = Math.min(GARDEN_MAX, Math.max(gardenSize(trees.length) + Math.max(0, extra), furthest));
+  const wanted = Math.max(gardenSize(trees.length), Math.min(GARDEN_LIMIT, gardenSize(trees.length) + Math.max(0, extra)));
+  let n = Math.min(GARDEN_MAX, Math.max(wanted, furthest));
   // Every tree needs a tile.
   while (n * n < trees.length && n < GARDEN_MAX) n++;
 
@@ -86,10 +92,11 @@ export interface GardenResize {
 /**
  * 땅 넓히기: one more row and column on the far edges (c = n and r = n), so tile coordinates never shift.
  * Every tree is pinned where it stands, otherwise unplaced trees would re-centre in the bigger garden.
+ * Null at `GARDEN_LIMIT` (or beyond it, for a garden that old far-out trees already made bigger).
  */
 export function expandGarden(trees: Plantable[], extra = 0): GardenResize | null {
   const { n, positions } = layoutGarden(trees, extra);
-  if (n >= GARDEN_MAX) return null;
+  if (n >= GARDEN_LIMIT) return null;
   return { extra: n + 1 - gardenSize(trees.length), n: n + 1, positions };
 }
 

@@ -19,10 +19,28 @@ export default function ResetPasswordScreen() {
   const { t } = useTranslation();
   const auth = useAuthActions();
   const { failureText, fieldText } = useAuthText();
-  const params = useLocalSearchParams<{ code?: string; error_description?: string }>();
+  const params = useLocalSearchParams<{ code?: string; token_hash?: string; error_description?: string }>();
   const status = useAuthStore((s) => s.status);
   const confirmRef = useRef<TextInput>(null);
-  const [exchanging, setExchanging] = useState(Platform.OS !== 'web' && !!params.code);
+  const [exchanging, setExchanging] = useState((Platform.OS !== 'web' && !!params.code) || !!params.token_hash);
+  const [linkFailed, setLinkFailed] = useState(false);
+
+  // The Korean recovery template links `?token_hash=…&type=recovery`: verifiable in any browser / device,
+  // unlike the default PKCE link that only works where the reset was requested.
+  useEffect(() => {
+    const sb = getSupabase();
+    if (!params.token_hash || !sb) return;
+    markSessionAlive();
+    sb.auth
+      .verifyOtp({ token_hash: params.token_hash, type: 'recovery' })
+      .then(({ error }) => {
+        if (error) {
+          console.warn('[auth] reset verify', error);
+          setLinkFailed(true);
+        }
+      })
+      .finally(() => setExchanging(false));
+  }, [params.token_hash]);
   const [timedOut, setTimedOut] = useState(false);
   const [password, setPassword] = useState('');
   const [confirm, setConfirm] = useState('');
@@ -43,8 +61,9 @@ export default function ResetPasswordScreen() {
     return () => clearTimeout(timer);
   }, []);
 
-  const hasSession = status === 'signedIn';
-  const checking = !params.error_description && !hasSession && (exchanging || status === 'loading' || !timedOut);
+  // A failed token must not fall through to a session that was already open in this browser.
+  const hasSession = status === 'signedIn' && !linkFailed;
+  const checking = !params.error_description && !linkFailed && (exchanging || (!hasSession && (status === 'loading' || !timedOut)));
   const passwordError = validateNewPassword(password);
   const confirmError = validateConfirm(password, confirm);
 

@@ -2,7 +2,7 @@
 // 자동 로그인 off, password reset mail, anonymous data carry-over and account switching.
 // Usage: node e2e-auth.mjs http://localhost:8105 http://localhost:54329
 import { writeFileSync } from 'node:fs';
-import { openBrowser, sleep } from './cdp.mjs';
+import { openBrowser, SESSION_JS, sleep } from './cdp.mjs';
 
 const BASE = process.argv[2] ?? 'http://localhost:8105';
 const SB = process.argv[3] ?? 'http://localhost:54329';
@@ -15,8 +15,8 @@ const B = { email: `b${stamp}@forest.kr`, nickname: '솔방울숲', password: 'p
 
 // Headless Edge can stop answering input on a new-password field after earlier login submits in the same
 // profile, so the sign-up / account phase runs in a second, fresh browser.
-// The wrong-password attempt is deliberate: its 400 is expected.
-const ignore = [/auth\/v1\/token\?grant_type=password/];
+// Deliberate failures: wrong password (400), the second reset mail within 60 s (429), duplicate sign-up (422).
+const ignore = [/auth\/v1\/token\?grant_type=password/, /429 .*auth\/v1\/recover/, /422 .*auth\/v1\/signup/];
 let P = await openBrowser('auth', { base: BASE, out: OUT, ignore });
 const fill = async (placeholder, text) => {
   // Clear through the native setter so React sees the change, then type like a user.
@@ -58,7 +58,15 @@ const signOut = async () => {
 try {
   // 1. Gate: every protected route lands on the login screen.
   await P.visit('/', 6000);
-  check('gate: / shows login', (await P.waitFor('비밀번호 찾기', 10000)) && (await P.bodyHas('카카오로 시작하기')) && (await P.bodyHas('구글로 시작하기')));
+  check(
+    'gate: / shows login with round kakao / google buttons',
+    (await P.waitFor('비밀번호 찾기', 10000)) &&
+      (await P.evaluate(`!!document.querySelector('[aria-label="카카오로 시작하기"]') && !!document.querySelector('[aria-label="구글로 시작하기"]')`)) &&
+      !(await P.bodyHas('카카오로 시작하기')),
+  );
+  // Tagline sits under the logo, the 로그인 heading above the card (both before the e-mail label).
+  const order = await P.evaluate(`(() => { const t = document.body.innerText; return [t.indexOf('책을 읽을수록 나만의 숲이 자라요'), t.indexOf('로그인'), t.indexOf('이메일')]; })()`);
+  check('login: tagline → heading → form order', order[0] >= 0 && order[0] < order[1] && order[1] < order[2], JSON.stringify(order));
   await P.shot('01-login');
   await P.visit('/library', 4000);
   check('gate: /library shows login', await P.waitFor('아이디(이메일) 저장', 8000));
@@ -73,7 +81,7 @@ try {
   check('login: bad email format', await P.waitFor('이메일 형식이 올바르지 않아요', 3000));
   await signIn({ email: 'nobody@forest.kr', password: 'wrong1234' });
   check('login: wrong credentials message', await P.waitFor('이메일 또는 비밀번호가 맞지 않아요', 6000));
-  await P.clickText('카카오로 시작하기', 'last');
+  await P.clickLabel('카카오로 시작하기');
   check('kakao (provider off) → friendly error', await P.waitFor('카카오 로그인은 준비 중이에요', 6000));
   await P.shot('02-login-errors');
 
@@ -89,6 +97,13 @@ try {
   await fill('example@email.com', A.email);
   await P.clickText('재설정 메일 보내기', 'last');
   check('forgot password → mail sent state', await P.waitFor('메일을 확인해 주세요', 6000));
+  check('forgot password: 1-hour expiry + resend countdown', (await P.bodyHas('1시간 동안')) && (await P.waitFor('초 후에 다시 보낼 수 있어요', 3000)));
+  await P.shot('02b-forgot-sent');
+  // A reload forgets the on-screen timer; the server's per-address guard answers 429 → countdown message.
+  await P.visit(`/forgot-password?email=${encodeURIComponent(A.email)}`, 4000);
+  await P.clickText('재설정 메일 보내기', 'last');
+  check('forgot password: server 60s guard → "1분에 한 번" + countdown', (await P.waitFor('1분에 한 번만', 6000)) && (await P.bodyHas('초 후에 다시 보낼 수 있어요')));
+  await P.shot('02c-forgot-limit');
 
   // 5. Sign-up validation.
   const firstErrors = P.errors.filter((e) => !e.startsWith('[dialog]'));
@@ -125,10 +140,17 @@ try {
   const anon = await (await fetch(`${SB}/auth/v1/signup`, { method: 'POST', body: '{}' })).json();
   const now = Date.now();
   const entry = { id: 'anon1', book: { id: 'kr_9788936434120', source: 'kakao', title: '익명때읽던책', authors: ['작가'], isbn13: '9788936434120', pageCount: 200 }, status: 'reading', createdAt: now, updatedAt: now, progressUnit: 'page', currentPage: 20 };
-  await P.evaluate(`localStorage.setItem('sb-localhost-auth-token', ${JSON.stringify(JSON.stringify(anon))}); localStorage.setItem('rf-library', ${JSON.stringify(JSON.stringify({ state: { entries: { anon1: entry }, logs: [] }, version: 2 }))}); true`);
+  // Device A's guest data also has forest decor, settings and a forest name / avatar (all must follow the account).
+  const seed = {
+    'sb-localhost-auth-token': anon,
+    'rf-library': { state: { entries: { anon1: entry }, logs: [] }, version: 2 },
+    'rf-forest': { state: { localForestId: 'local-e2e', publishedSlug: null, weather: 'snow', waterings: {}, critters: ['butterfly', 'ladybug'], gardenExtra: 2 }, version: 2 },
+    'rf-settings': { state: { language: null, soundEnabled: false, blurUnownedQuotes: true, reviewVisibility: 'private' }, version: 1 },
+    'rf-profile': { state: { nickname: '새싹 독서가', forestName: '도토리의 숲', avatar: 'bun', authMode: 'guest', uid: null, email: null, photoURL: null, dataOwner: null }, version: 1 },
+  };
+  await P.evaluate(`(() => { const s = ${JSON.stringify(seed)}; for (const k in s) localStorage.setItem(k, JSON.stringify(s[k])); return true; })()`);
   await P.visit('/', 6000);
-  check('anonymous session → still gated, carry-over notice', (await P.waitFor('익명으로 쓰던 기록이 있어요', 8000)) && (await P.bodyHas('비밀번호 찾기')));
-  await P.shot('05-anonymous-notice');
+  check('anonymous session → still gated, no carry-over notice', (await P.waitFor('비밀번호 찾기', 8000)) && !(await P.bodyHas('익명으로 쓰던 기록이 있어요')));
   await signUp(A);
   check('signup → main tabs', await inApp());
   await sleep(2500);
@@ -163,6 +185,59 @@ try {
   await inApp();
   const back = await P.waitUntil(`Object.values(JSON.parse(localStorage.getItem('rf-library') || '{"state":{"entries":{}}}').state.entries).some(e => e.book.title === '익명때읽던책')`, 10000);
   check('re-login A → records pulled back from server', back);
+  check('re-login A → forest decor back after B reset it', await P.waitUntil(`JSON.parse(localStorage.getItem('rf-forest')).state.weather === 'snow'`, 8000));
+
+  // 9. "Device A" publishes its forest and makes a gallery card (straight through the API with A's token).
+  const sessionA = await P.evaluate(SESSION_JS);
+  const rest = (path, init = {}) =>
+    fetch(`${SB}/rest/v1/${path}`, { ...init, headers: { authorization: `Bearer ${sessionA.access_token}`, apikey: 'x', 'content-type': 'application/json', ...(init.headers ?? {}) } });
+  const forestRes = await rest('forests?select=share_slug', { method: 'POST', headers: { prefer: 'return=representation' }, body: JSON.stringify({ owner_id: sessionA.user.id, nickname: A.nickname, is_public: true }) });
+  const slug = (await forestRes.json())[0]?.share_slug;
+  const cardId = crypto.randomUUID();
+  await rest('quote_cards', {
+    method: 'POST',
+    body: JSON.stringify({ id: cardId, book_title: '익명때읽던책', quote: '숲은 천천히 자란다', image_path: `${sessionA.user.id}/c.png`, blur_path: `${sessionA.user.id}/b.jpg`, progress_percent: 10 }),
+  });
+  const firstErrors2 = P.errors.filter((e) => !e.startsWith('[dialog]'));
+  P.close();
+
+  // 10. "Device B": a fresh browser profile signs in to A → everything synced comes down.
+  P = await openBrowser('auth-deviceB', { base: BASE, out: OUT, ignore });
+  P.errors.push(...firstErrors2);
+  await P.visit('/login', 5000);
+  await signIn(A);
+  check('device B: login → main tabs', await inApp());
+  const stateOf = (key) => `JSON.parse(localStorage.getItem('${key}') || '{"state":{}}').state`;
+  check('device B: library + reading logs', await P.waitUntil(`Object.values(${stateOf('rf-library')}.entries || {}).some(e => e.book.title === '익명때읽던책' && e.currentPage === 20) && ${stateOf('rf-library')}.logs.length > 0`, 10000));
+  check('device B: forest decor (weather · critters · land)', await P.waitUntil(`(() => { const f = ${stateOf('rf-forest')}; return f.weather === 'snow' && f.critters.join() === 'butterfly,ladybug' && f.gardenExtra === 2; })()`, 8000));
+  check('device B: share slug of the published forest', !!slug && (await P.waitUntil(`${stateOf('rf-forest')}.publishedSlug === ${JSON.stringify(slug)}`, 8000)));
+  check('device B: settings (sound · blur · review visibility)', await P.waitUntil(`(() => { const s = ${stateOf('rf-settings')}; return s.soundEnabled === false && s.blurUnownedQuotes === true && s.reviewVisibility === 'private'; })()`, 8000));
+  check('device B: profile nickname · forest name · avatar', await P.waitUntil(`(() => { const p = ${stateOf('rf-profile')}; return p.nickname === ${JSON.stringify(A.nickname)} && p.forestName === '도토리의 숲' && p.avatar === 'bun'; })()`, 8000));
+  check('device B: gallery card counted in 만든 카드', await P.waitUntil(`(${stateOf('rf-cards')}.made || []).some(c => c.galleryId === '${cardId}')`, 8000));
+  await P.visit('/', 5000);
+  check('device B: forest name shown on the home forest', await P.waitFor('도토리의 숲', 6000));
+  await P.shot('07-deviceB-forest');
+
+  // 11. A deletes the book on "device A" → device B drops it on its next sync instead of uploading it again.
+  await rest('user_books?id=eq.anon1', { method: 'DELETE' });
+  await P.visit('/library', 6000);
+  check('device B: book deleted on device A disappears', await P.waitUntil(`!Object.values(${stateOf('rf-library')}.entries || {}).some(e => e.id === 'anon1')`, 8000));
+  const remoteRows = await (await rest('user_books?select=id')).json();
+  check('device B: deleted book not re-uploaded', Array.isArray(remoteRows) && !remoteRows.some((r) => r.id === 'anon1'), JSON.stringify(remoteRows));
+
+  // 12. Duplicate sign-up with A's address → "이미 가입된 이메일" + links; confirmation link → login + notice.
+  check('device B: logout', await signOut());
+  await signUp(A);
+  check('duplicate sign-up → 이미 가입된 이메일', await P.waitFor('이미 가입된 이메일이에요', 6000));
+  check('duplicate sign-up → 로그인하기 / 비밀번호 찾기 links', (await P.bodyHas('로그인하기')) && (await P.bodyHas('비밀번호 찾기')));
+  await P.shot('08-duplicate-signup');
+  await P.clickText('로그인하기', 'last');
+  check('duplicate sign-up → login prefilled', await P.waitUntil(`[...document.querySelectorAll('input')].some(i => i.placeholder === 'example@email.com' && i.value === ${JSON.stringify(A.email)})`, 5000));
+  await P.visit('/auth/confirmed', 6000);
+  check('confirmation link → login screen with 인증 완료 notice', (await P.waitFor('이메일 인증이 완료되었어요', 8000)) && (await P.bodyHas('비밀번호 찾기')));
+  await P.shot('09-confirmed');
+  await P.visit('/auth/confirmed?error=access_denied&error_code=otp_expired', 6000);
+  check('expired confirmation link → explains + login', await P.waitFor('인증 링크가 만료됐거나', 8000));
 
   report.errors = P.errors.filter((e) => !e.startsWith('[dialog]'));
   report.failed = P.failed;

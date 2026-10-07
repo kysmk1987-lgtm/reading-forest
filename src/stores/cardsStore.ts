@@ -14,6 +14,8 @@ export interface MadeCard {
 interface CardsState {
   made: MadeCard[];
   recordCard: (card: Omit<MadeCard, 'createdAt'>) => void;
+  /** Adds the account's gallery cards made on other devices (matched by `galleryId`). */
+  mergeGallery: (cards: { galleryId: string; bookTitle: string; createdAt: number }[]) => void;
   clearLocal: () => void;
 }
 
@@ -28,6 +30,13 @@ export const useCardsStore = create<CardsState>()(
           const made = [...s.made];
           made[i] = { ...made[i], ...card, createdAt: made[i].createdAt };
           return { made };
+        }),
+      mergeGallery: (cards) =>
+        set((s) => {
+          const known = new Set(s.made.map((c) => c.galleryId).filter(Boolean));
+          const incoming = cards.filter((c) => !known.has(c.galleryId)).map((c) => ({ id: c.galleryId, ...c }));
+          if (!incoming.length) return s;
+          return { made: [...s.made, ...incoming].sort((a, b) => a.createdAt - b.createdAt).slice(-1000) };
         }),
       clearLocal: () => set({ made: [] }),
     }),

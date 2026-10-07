@@ -6,6 +6,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Svg, { Defs, LinearGradient, Rect, Stop } from 'react-native-svg';
 
 import { BookCover } from '@/components/BookCover';
+import { StackTabBar } from '@/components/ForestTabBar';
 import { AppText, Button, EmptyState, IconButton, SegmentedControl, showToast } from '@/components/ui';
 import { captureView, saveImage, shareImage } from '@/features/gallery/capture';
 import { ambientById, type AmbientId } from '@/features/sound/ambient';
@@ -20,7 +21,7 @@ import { useCardsStore } from '@/stores/cardsStore';
 import { useLibraryStore } from '@/stores/libraryStore';
 import { useProfileStore } from '@/stores/profileStore';
 import { useTimerStore } from '@/stores/timerStore';
-import { fonts, MAX_APP_WIDTH, palette, spacing } from '@/theme';
+import { colors, fonts, MAX_APP_WIDTH, palette, spacing } from '@/theme';
 
 type SlideId = 'intro' | 'books' | 'focus' | 'trees' | 'rhythm' | 'sound' | 'taste' | 'cards' | 'persona' | 'summary';
 
@@ -55,8 +56,10 @@ export default function WrappedScreen() {
   const cards = useCardsStore((s) => s.made);
   const nickname = useProfileStore((s) => s.nickname);
   const insets = useSafeAreaInsets();
-  const { width: windowWidth, height } = useWindowDimensions();
+  const { width: windowWidth, height: windowHeight } = useWindowDimensions();
   const width = Math.min(windowWidth, MAX_APP_WIDTH);
+  /** The story area above the tab bar (the whole window until the first layout). */
+  const [height, setHeight] = useState(windowHeight);
 
   const stats = useMemo(
     () => computeWrapped(sample ? sampleWrappedInput(period) : { entries: Object.values(entries), logs, sessions: history, cards }, period),
@@ -95,22 +98,25 @@ export default function WrappedScreen() {
 
   if (!sample && isEmptyWrapped(stats)) {
     return (
-      <View style={[styles.emptyWrap, { paddingTop: insets.top + spacing.lg }]}>
-        <View style={styles.closeRow}>
-          <IconButton name="close" accessibilityLabel={t('common.close')} onPress={close} />
+      <View style={styles.page}>
+        <View style={[styles.emptyWrap, { paddingTop: insets.top + spacing.lg }]}>
+          <View style={styles.closeRow}>
+            <IconButton name="close" accessibilityLabel={t('common.close')} onPress={close} />
+          </View>
+          <EmptyState
+            emoji="🌱"
+            tint={palette.leafSoft}
+            title={t('wrapped.emptyTitle', { period: periodLabel })}
+            body={t('wrapped.emptyBody')}
+            action={
+              <Button
+                label={`✨ ${t('wrapped.sample')}`}
+                onPress={() => router.setParams({ sample: '1' })}
+              />
+            }
+          />
         </View>
-        <EmptyState
-          emoji="🌱"
-          tint={palette.leafSoft}
-          title={t('wrapped.emptyTitle', { period: periodLabel })}
-          body={t('wrapped.emptyBody')}
-          action={
-            <Button
-              label={`✨ ${t('wrapped.sample')}`}
-              onPress={() => router.setParams({ sample: '1' })}
-            />
-          }
-        />
+        <StackTabBar />
       </View>
     );
   }
@@ -118,8 +124,8 @@ export default function WrappedScreen() {
   const bg = slide === 'persona' || slide === 'summary' ? persona.colors.bg : SLIDE_BG[slide];
   const ink = slide === 'persona' || slide === 'summary' ? persona.colors.ink : palette.brown;
 
-  return (
-    <View style={[styles.root, { height }]} {...pan.panHandlers}>
+  const story = (
+    <View style={styles.root} onLayout={(e) => setHeight(e.nativeEvent.layout.height)} {...pan.panHandlers}>
       <Svg width="100%" height="100%" style={StyleSheet.absoluteFill} preserveAspectRatio="none" viewBox="0 0 10 10">
         <Defs>
           <LinearGradient id="wbg" x1="0" y1="0" x2="0" y2="1">
@@ -152,7 +158,7 @@ export default function WrappedScreen() {
         </View>
       </View>
 
-      <SlideFrame key={slide} style={[styles.content, { paddingBottom: insets.bottom + spacing.xl }, { pointerEvents: slide === 'summary' ? 'auto' : 'none' }]}>
+      <SlideFrame key={slide} style={[styles.content, { paddingBottom: spacing.xl }, { pointerEvents: slide === 'summary' ? 'auto' : 'none' }]}>
         {slide === 'intro' ? <IntroSlide nickname={nickname} periodLabel={periodLabel} /> : null}
         {slide === 'books' ? <BooksSlide stats={stats} periodLabel={periodLabel} /> : null}
         {slide === 'focus' ? <FocusSlide stats={stats} /> : null}
@@ -187,17 +193,24 @@ export default function WrappedScreen() {
             periodLabel={periodLabel}
             nickname={nickname}
             maxWidth={width - spacing.lg * 2}
-            maxHeight={height - insets.top - insets.bottom - 230}
+            maxHeight={height - insets.top - 230}
             onReplay={() => setIndex(0)}
           />
         ) : null}
       </SlideFrame>
 
       {index === 0 ? (
-        <AppText variant="tiny" color={ink} center style={[styles.hint, { bottom: insets.bottom + spacing.md }]}>
+        <AppText variant="tiny" color={ink} center style={[styles.hint, { bottom: spacing.md }]}>
           {t('wrapped.tapHint')}
         </AppText>
       ) : null}
+    </View>
+  );
+
+  return (
+    <View style={styles.page}>
+      {story}
+      <StackTabBar />
     </View>
   );
 }
@@ -514,6 +527,7 @@ function SummarySlide(props: {
 }
 
 const styles = StyleSheet.create({
+  page: { flex: 1, backgroundColor: colors.background },
   root: { flex: 1, overflow: 'hidden' },
   emptyWrap: { flex: 1, padding: spacing.lg, gap: spacing.lg },
   closeRow: { alignItems: 'flex-end' },

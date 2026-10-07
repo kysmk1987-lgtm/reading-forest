@@ -8,6 +8,7 @@ import { parsePageCount } from '../api/_lib/pages';
 import { DEFAULT_CRITTERS, effectiveCritters, normalizeCritters, toggleCritter } from '../src/features/forest/critters';
 import {
   expandGarden,
+  GARDEN_LIMIT,
   GARDEN_MAX,
   GARDEN_MIN,
   gardenSize,
@@ -54,16 +55,36 @@ test('saved tiles are kept, clashes resolved by age, others fill the rest', () =
   assert.notDeepEqual(positions.t2, { c: 0, r: 0 });
   assert.notDeepEqual(positions.t0, { c: 0, r: 0 });
 });
-test('garden grows to fit saved tiles and the 땅 넓히기 extra (no product cap, only the technical GARDEN_MAX)', () => {
+test('garden grows to fit saved tiles and the 땅 넓히기 extra, up to GARDEN_LIMIT (20×20)', () => {
+  assert.equal(GARDEN_LIMIT, 20);
   assert.equal(layoutGarden(trees(1, { 0: { gardenX: 5, gardenY: 2 } })).n, 6);
   assert.equal(layoutGarden(trees(2), 2).n, 5);
   assert.equal(layoutGarden(trees(2), 7).n, 10, 'beyond the old 6-step limit');
-  assert.equal(layoutGarden(trees(2), 40).n, 43);
-  assert.equal(layoutGarden(trees(2), 1e6).n, GARDEN_MAX);
-  const far = layoutGarden(trees(2, { 1: { gardenX: 30, gardenY: 18 } }));
-  assert.equal(far.n, 31, 'a tile far out (after expanding) keeps the garden that big');
+  assert.equal(layoutGarden(trees(2), 17).n, GARDEN_LIMIT);
+  assert.equal(layoutGarden(trees(2), 40).n, GARDEN_LIMIT, 'an old, bigger extra is clamped');
+  assert.equal(layoutGarden(trees(2), 1e6).n, GARDEN_LIMIT);
+  const inner = layoutGarden(trees(2, { 1: { gardenX: 19, gardenY: 3 } }), 40);
+  assert.equal(inner.n, GARDEN_LIMIT);
+  assert.ok(transplant(inner.positions, 't0', { c: 19, r: 19 }, inner.n), 'moving into the last row works');
+});
+test('a saved garden bigger than 20×20 keeps every tree where it stands', () => {
+  const far = layoutGarden(trees(3, { 1: { gardenX: 30, gardenY: 18 }, 2: { gardenX: 4, gardenY: 24 } }), 40);
+  assert.equal(far.n, 31, 'the far tree keeps the garden that big (no relocation)');
   assert.deepEqual(far.positions.t1, { c: 30, r: 18 });
-  assert.ok(transplant(far.positions, 't0', { c: 25, r: 25 }, far.n), 'moving into expanded land works');
+  assert.deepEqual(far.positions.t2, { c: 4, r: 24 });
+  assert.equal(expandGarden(trees(3, { 1: { gardenX: 30, gardenY: 18 } }), 40), null, '땅 넓히기 is off beyond the cap');
+  assert.equal(shrinkGarden(trees(3, { 1: { gardenX: 30, gardenY: 18 } }), 40), null, 'the far tree blocks 땅 좁히기');
+  // Moving the far trees inward lets the garden fall back to the 20×20 cap.
+  const moved = transplant(far.positions, 't1', { c: 10, r: 10 }, far.n)!;
+  const movedAgain = transplant(moved, 't2', { c: 11, r: 10 }, far.n)!;
+  const pinned = trees(3).map((t) => ({ ...t, gardenX: movedAgain[t.id].c, gardenY: movedAgain[t.id].r }));
+  assert.equal(layoutGarden(pinned, 40).n, GARDEN_LIMIT);
+  assert.equal(layoutGarden(pinned, 0).n, 16, 'without extra it is only as big as the furthest tree (t0 at 15:15)');
+});
+test('more trees than 20×20 tiles still give every tree a tile', () => {
+  const { n, positions } = layoutGarden(trees(GARDEN_LIMIT * GARDEN_LIMIT + 5), 1e6);
+  assert.equal(n, 21);
+  assert.equal(new Set(Object.values(positions).map((p) => `${p.c}:${p.r}`)).size, GARDEN_LIMIT * GARDEN_LIMIT + 5);
 });
 test('invalid coordinates are ignored', () => {
   assert.equal(validGardenCoord(-1), false);
@@ -220,6 +241,19 @@ test('repeated expand then shrink returns to the start; 초기화 restores size 
   }
   assert.equal(layoutGarden(list, extra).n, start.n);
   assert.equal(shrinkGarden(list, extra), null);
+});
+test('땅 넓히기 stops at 20×20', () => {
+  let list = trees(2);
+  let extra = 0;
+  let steps = 0;
+  for (let step = expandGarden(list, extra); step; step = expandGarden(list, extra)) {
+    list = pinAll(list, step.positions);
+    extra = step.extra;
+    steps++;
+  }
+  assert.equal(steps, GARDEN_LIMIT - GARDEN_MIN);
+  assert.equal(layoutGarden(list, extra).n, GARDEN_LIMIT);
+  assert.ok(shrinkGarden(list, extra), '땅 좁히기 still works at the cap');
 });
 
 console.log('premium decorations');

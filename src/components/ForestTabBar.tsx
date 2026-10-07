@@ -6,6 +6,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { AppText } from '@/components/ui';
 import { tapFeedback } from '@/lib/feedback';
+import { useKeyboardVisible } from '@/lib/useKeyboardVisible';
 import { colors, palette, radius, softShadow, spacing } from '@/theme';
 
 import { BannerAdPlaceholder } from './BannerAdPlaceholder';
@@ -34,9 +35,14 @@ interface TabItem {
   label: string;
 }
 
-/** Wooden-plank tab bar with puffy bubbles; hosts the free-tier banner slot above it. */
+/**
+ * Wooden-plank tab bar with puffy bubbles; hosts the free-tier banner slot above it.
+ * Steps aside while the on-screen keyboard is open so it never covers inputs or the buttons under them.
+ */
 function TabBarView({ tabs, activeKey, onPress }: { tabs: TabItem[]; activeKey: string | undefined; onPress: (tab: TabItem) => void }) {
   const insets = useSafeAreaInsets();
+  const keyboardOpen = useKeyboardVisible();
+  if (keyboardOpen) return null;
   return (
     <View style={styles.outer}>
       <BannerAdPlaceholder />

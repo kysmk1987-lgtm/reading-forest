@@ -5,8 +5,8 @@ import { useTranslation } from 'react-i18next';
 import { StyleSheet, View, type TextInput } from 'react-native';
 
 import { AppText, Button, showToast } from '@/components/ui';
-import { useAuthStore } from '@/features/auth/authStore';
 import { AuthLayout, CheckRow, Field, LegalSheet, Notice, PasswordField, TextLink, useAuthText } from '@/features/auth/AuthUI';
+import { useMailCooldown } from '@/features/auth/cooldown';
 import type { LegalDocId } from '@/features/auth/legal';
 import { useAuthActions, type AuthOutcome } from '@/features/auth/useAuth';
 import { NICKNAME_MAX, normalizeEmail, validateSignUp, type SignUpErrors, type SignUpInput } from '@/features/auth/validation';
@@ -18,7 +18,6 @@ export default function SignUpScreen() {
   const { t } = useTranslation();
   const auth = useAuthActions();
   const { failureText, fieldText } = useAuthText();
-  const hasAnonymous = useAuthStore((s) => s.hasAnonymousSession);
   const nicknameRef = useRef<TextInput>(null);
   const passwordRef = useRef<TextInput>(null);
   const confirmRef = useRef<TextInput>(null);
@@ -29,6 +28,7 @@ export default function SignUpScreen() {
   const [failure, setFailure] = useState<AuthOutcome>(null);
   const [sentTo, setSentTo] = useState<string | null>(null);
   const [legal, setLegal] = useState<LegalDocId | null>(null);
+  const resendLeft = useMailCooldown('confirm', sentTo ?? '');
 
   const errors = validateSignUp(form);
   const shown = (key: FieldKey) => (submitted || touched[key] ? fieldText(errors[key]) : null);
@@ -39,6 +39,7 @@ export default function SignUpScreen() {
   const touch = (key: FieldKey) => () => setTouched((s) => ({ ...s, [key]: true }));
 
   const submit = async () => {
+    if (auth.pending) return;
     setSubmitted(true);
     setFailure(null);
     if (Object.keys(errors).length) return;
@@ -62,14 +63,25 @@ export default function SignUpScreen() {
   };
 
   const back = () => (router.canGoBack() ? router.back() : router.replace('/login'));
+  const existingEmail = normalizeEmail(form.email);
 
   if (sentTo) {
     return (
       <AuthLayout title={t('auth.confirmSentTitle')}>
         <AppText style={styles.body}>{t('auth.confirmSentBody', { email: sentTo })}</AppText>
-        <Notice message={failureText(failure)} />
-        <Button label={t('auth.resend')} variant="soft" fullWidth loading={auth.pending === 'resend'} onPress={resend} />
-        <Button label={t('auth.backToLogin')} fullWidth onPress={() => router.replace('/login')} />
+        <AppText variant="caption" muted>
+          {t('auth.confirmSentHint')}
+        </AppText>
+        <Notice message={failureText(failure, undefined, resendLeft)} />
+        <Button
+          label={resendLeft ? t('auth.resendIn', { seconds: resendLeft }) : t('auth.resend')}
+          variant="soft"
+          fullWidth
+          loading={auth.pending === 'resend'}
+          disabled={resendLeft > 0}
+          onPress={resend}
+        />
+        <Button label={t('auth.backToLogin')} fullWidth onPress={() => router.replace({ pathname: '/login', params: { email: sentTo } })} />
       </AuthLayout>
     );
   }
@@ -88,7 +100,6 @@ export default function SignUpScreen() {
           <TextLink label={t('auth.login')} onPress={back} />
         </View>
       }>
-      {hasAnonymous ? <Notice tone="info" message={t('auth.anonymousNotice')} /> : null}
       <Field
         label={t('auth.email')}
         value={form.email}
@@ -161,8 +172,17 @@ export default function SignUpScreen() {
       </View>
       {submitted ? <Notice message={fieldText(errors.terms ?? errors.privacy)} /> : null}
       <Notice message={failureText(failure)} />
+      {failure === 'userExists' ? (
+        <View style={styles.existsLinks}>
+          <TextLink label={t('auth.goLogin')} onPress={() => router.replace({ pathname: '/login', params: { email: existingEmail } })} small />
+          <AppText variant="caption" muted>
+            ·
+          </AppText>
+          <TextLink label={t('auth.forgot')} onPress={() => router.push({ pathname: '/forgot-password', params: { email: existingEmail } })} small />
+        </View>
+      ) : null}
 
-      <Button label={t('auth.signUp')} size="lg" fullWidth loading={auth.pending === 'signUp'} onPress={submit} />
+      <Button label={t('auth.signUp')} size="lg" fullWidth loading={auth.pending === 'signUp'} disabled={!!auth.pending} onPress={submit} />
       <LegalSheet doc={legal} onClose={() => setLegal(null)} />
     </AuthLayout>
   );
@@ -179,5 +199,6 @@ const styles = StyleSheet.create({
     borderColor: colors.border,
   },
   hr: { height: 2, borderRadius: 1, backgroundColor: colors.border, marginVertical: spacing.xs },
+  existsLinks: { flexDirection: 'row', justifyContent: 'center', alignItems: 'center', gap: spacing.sm },
   footer: { flexDirection: 'row', justifyContent: 'center', alignItems: 'center', gap: spacing.sm },
 });
