@@ -45,7 +45,6 @@ export default function RootLayout() {
               <Stack.Screen name="book/[id]" />
               <Stack.Screen name="forest/[slug]" />
               <Stack.Screen name="auth/callback" />
-              <Stack.Screen name="gallery" />
               <Stack.Screen name="trees" />
               <Stack.Screen name="room/[id]" />
               <Stack.Screen name="card/new" />

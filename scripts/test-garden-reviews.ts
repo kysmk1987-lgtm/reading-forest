@@ -5,11 +5,11 @@
 import assert from 'node:assert/strict';
 
 import { parsePageCount } from '../api/_lib/pages';
-import { DEFAULT_CRITTER, effectiveCritter } from '../src/features/forest/critters';
-import { GARDEN_MAX, gardenSize, layoutGarden, tileAt, transplant, validGardenCoord } from '../src/features/forest/layout';
-import { DEFAULT_AVATAR, effectiveAvatar } from '../src/features/profile/avatars';
+import { DEFAULT_CRITTERS, effectiveCritters, normalizeCritters, toggleCritter } from '../src/features/forest/critters';
+import { GARDEN_MAX, gardenSize, layoutGarden, LEGACY_GARDEN_MAX, tileAt, transplant, validGardenCoord } from '../src/features/forest/layout';
+import { AVATAR_IDS, AVATARS, DEFAULT_AVATAR, effectiveAvatar } from '../src/features/profile/avatars';
 import { defaultProgressUnit, pagesDisplay } from '../src/features/library/pages';
-import { entryToRow, rowToEntry, withoutGardenColumns } from '../src/features/library/syncMapping';
+import { entryToRow, rowToEntry, withLegacyGardenColumns, withoutGardenColumns } from '../src/features/library/syncMapping';
 import { cleanReviewBody, distributionPercents, normalizeRating, summarize } from '../src/features/reviews/aggregate';
 import type { LibraryEntry } from '../src/types';
 
@@ -43,17 +43,24 @@ test('saved tiles are kept, clashes resolved by age, others fill the rest', () =
   assert.notDeepEqual(positions.t2, { c: 0, r: 0 });
   assert.notDeepEqual(positions.t0, { c: 0, r: 0 });
 });
-test('garden grows to fit saved tiles and the 땅 넓히기 extra, capped at GARDEN_MAX', () => {
+test('garden grows to fit saved tiles and the 땅 넓히기 extra (no product cap, only the technical GARDEN_MAX)', () => {
   assert.equal(layoutGarden(trees(1, { 0: { gardenX: 5, gardenY: 2 } })).n, 6);
   assert.equal(layoutGarden(trees(2), 2).n, 5);
-  assert.equal(layoutGarden(trees(2), 99).n, GARDEN_MAX);
+  assert.equal(layoutGarden(trees(2), 7).n, 10, 'beyond the old 6-step limit');
+  assert.equal(layoutGarden(trees(2), 40).n, 43);
+  assert.equal(layoutGarden(trees(2), 1e6).n, GARDEN_MAX);
+  const far = layoutGarden(trees(2, { 1: { gardenX: 30, gardenY: 18 } }));
+  assert.equal(far.n, 31, 'a tile far out (after expanding) keeps the garden that big');
+  assert.deepEqual(far.positions.t1, { c: 30, r: 18 });
+  assert.ok(transplant(far.positions, 't0', { c: 25, r: 25 }, far.n), 'moving into expanded land works');
 });
 test('invalid coordinates are ignored', () => {
   assert.equal(validGardenCoord(-1), false);
   assert.equal(validGardenCoord(GARDEN_MAX), false);
   assert.equal(validGardenCoord(1.5), false);
   assert.equal(validGardenCoord(3), true);
-  const { positions } = layoutGarden([{ id: 'a', createdAt: 0, gardenX: 40, gardenY: 1 }]);
+  assert.equal(validGardenCoord(40), true, 'expanded land beyond the old 12×12');
+  const { positions } = layoutGarden([{ id: 'a', createdAt: 0, gardenX: GARDEN_MAX + 5, gardenY: 1 }]);
   assert.deepEqual(positions.a, { c: 1, r: 1 });
 });
 
@@ -103,7 +110,17 @@ test('garden tiles sync through user_books.garden_x/garden_y', () => {
   const back = rowToEntry(row);
   assert.equal(back.gardenX, 2);
   assert.equal(back.gardenY, 4);
-  assert.equal(rowToEntry({ ...row, garden_x: 99 }).gardenX, undefined);
+  assert.equal(rowToEntry({ ...row, garden_x: 99 }).gardenX, 99, 'expanded land beyond the old 0–11 range syncs back');
+  assert.equal(rowToEntry({ ...row, garden_x: GARDEN_MAX }).gardenX, undefined);
+});
+test('without migration 0006 only tiles beyond 0–11 drop their garden columns', () => {
+  const entry = { id: 'e', book: { id: 'kr_1', source: 'kakao', title: 'x', authors: [] }, status: 'read', createdAt: 0, updatedAt: 0 } as LibraryEntry;
+  const near = entryToRow({ ...entry, gardenX: LEGACY_GARDEN_MAX - 1, gardenY: 0 }, 'u');
+  assert.equal(withLegacyGardenColumns(near).garden_x, LEGACY_GARDEN_MAX - 1);
+  const far = entryToRow({ ...entry, gardenX: 3, gardenY: LEGACY_GARDEN_MAX }, 'u');
+  assert.equal(far.garden_y, LEGACY_GARDEN_MAX);
+  assert.equal('garden_y' in withLegacyGardenColumns(far), false);
+  assert.equal(withLegacyGardenColumns(far).status, 'read', 'the rest of the row is still written');
 });
 test('초기화: pinning the pre-edit layout and the old extra restores the original garden', () => {
   const start = layoutGarden(trees(4), 0);
@@ -116,16 +133,39 @@ test('초기화: pinning the pre-edit layout and the old extra restores the orig
 });
 
 console.log('premium decorations');
+test('critters: several at once, 없음 clears, toggles keep chip order', () => {
+  assert.deepEqual(toggleCritter([], 'ladybug'), ['ladybug']);
+  assert.deepEqual(toggleCritter(['ladybug'], 'butterfly'), ['butterfly', 'ladybug']);
+  assert.deepEqual(toggleCritter(['butterfly', 'ladybug'], 'butterfly'), ['ladybug']);
+  assert.deepEqual(toggleCritter(['butterfly', 'frog'], 'none'), []);
+});
+test('critters: the old single value migrates to a list', () => {
+  assert.deepEqual(normalizeCritters('frog'), ['frog']);
+  assert.deepEqual(normalizeCritters('none'), []);
+  assert.deepEqual(normalizeCritters(undefined), [...DEFAULT_CRITTERS]);
+  assert.deepEqual(normalizeCritters('dragon'), [...DEFAULT_CRITTERS]);
+  assert.deepEqual(normalizeCritters(['bee', 'dragon', 'butterfly', 'bee']), ['butterfly', 'bee'], 'unknown and duplicate entries dropped');
+  assert.deepEqual(normalizeCritters([]), []);
+});
 test('premium critters and avatars fall back to the free default when premium is off', () => {
-  assert.equal(effectiveCritter('frog', false), DEFAULT_CRITTER);
-  assert.equal(effectiveCritter('frog', true), 'frog');
-  assert.equal(effectiveCritter('ladybug', false), 'ladybug');
-  assert.equal(effectiveCritter('none', false), 'none');
-  assert.equal(effectiveCritter('dragon', true), DEFAULT_CRITTER);
+  assert.deepEqual(effectiveCritters(['butterfly', 'frog', 'bee'], false), ['butterfly'], 'locked ones are dropped');
+  assert.deepEqual(effectiveCritters(['ladybug', 'firefly'], false), ['ladybug']);
+  assert.deepEqual(effectiveCritters(['frog'], false), [...DEFAULT_CRITTERS], 'nothing left → default');
+  assert.deepEqual(effectiveCritters(['frog', 'bee'], true), ['frog', 'bee']);
+  assert.deepEqual(effectiveCritters([], false), []);
+  assert.deepEqual(effectiveCritters('frog', false), [...DEFAULT_CRITTERS], 'legacy value');
   assert.equal(effectiveAvatar('bunny', false), DEFAULT_AVATAR);
   assert.equal(effectiveAvatar('bunny', true), 'bunny');
   assert.equal(effectiveAvatar('glasses', false), 'glasses');
   assert.equal(effectiveAvatar(null, true), DEFAULT_AVATAR);
+  assert.equal(effectiveAvatar('cat', false), DEFAULT_AVATAR);
+  assert.equal(effectiveAvatar('bun', false), 'bun');
+});
+test('avatars: 5 free + 6 premium people, ids fit the profiles.avatar check', () => {
+  const people = AVATAR_IDS.filter((id) => AVATARS[id].person);
+  assert.equal(people.filter((id) => !AVATARS[id].premium).length, 5);
+  assert.equal(people.filter((id) => AVATARS[id].premium).length, 6);
+  for (const id of AVATAR_IDS) assert.match(id, /^[a-z][a-z0-9_-]{0,31}$/);
 });
 
 console.log('review aggregation');

@@ -2,7 +2,7 @@ import { memo, useEffect, useState } from 'react';
 import { Animated, Easing, Platform, StyleSheet, Text, View } from 'react-native';
 import Svg, { Circle, Ellipse, G, Path, Rect } from 'react-native-svg';
 
-import { AVATARS, type AvatarId, type PersonLook } from './avatars';
+import { AVATARS, isHood, type AvatarId, type PersonLook } from './avatars';
 
 const useNativeDriver = Platform.OS !== 'web';
 const INK = '#4A3A2E';
@@ -33,6 +33,34 @@ function HeadBack({ cx, cy, r, look }: { cx: number; cy: number; r: number; look
           <Circle cx={cx} cy={cy - r * 0.05} r={r * 1.22} fill={wear} />
         </G>
       );
+    case 'catHood':
+      return (
+        <G>
+          {[-1, 1].map((s) => (
+            <G key={s}>
+              <Path
+                d={`M${cx + s * r * 1.08} ${cy - r * 0.5} L${cx + s * r * 0.98} ${cy - r * 1.62} L${cx + s * r * 0.22} ${cy - r * 1.08} Z`}
+                fill={wear}
+                stroke={wear}
+                strokeWidth={r * 0.16}
+                strokeLinejoin="round"
+              />
+              <Path d={`M${cx + s * r * 0.98} ${cy - r * 0.8} L${cx + s * r * 0.93} ${cy - r * 1.42} L${cx + s * r * 0.5} ${cy - r * 1.1} Z`} fill={BLUSH} />
+            </G>
+          ))}
+          <Circle cx={cx} cy={cy - r * 0.05} r={r * 1.22} fill={wear} />
+          <Circle cx={cx} cy={cy - r * 0.05} r={r * 1.22} fill="none" stroke="rgba(91,70,54,0.12)" strokeWidth={r * 0.06} />
+          {[-1, 1].map((s) => (
+            <Path
+              key={`w${s}`}
+              d={`M${cx + s * r * 1.04} ${cy + r * 0.28} l${s * r * 0.14} ${-r * 0.05} M${cx + s * r * 1.04} ${cy + r * 0.44} l${s * r * 0.15} ${r * 0.03}`}
+              stroke="rgba(74,58,46,0.55)"
+              strokeWidth={r * 0.05}
+              strokeLinecap="round"
+            />
+          ))}
+        </G>
+      );
     default:
       break;
   }
@@ -59,9 +87,63 @@ function HeadBack({ cx, cy, r, look }: { cx: number; cy: number; r: number; look
       );
     case 'short':
       return <Circle cx={cx} cy={cy - r * 0.12} r={r * 1.07} fill={look.hair} />;
+    case 'bun':
+      return (
+        <G>
+          <Circle cx={cx} cy={cy - r * 0.12} r={r * 1.07} fill={look.hair} />
+          <Circle cx={cx} cy={cy - r * 1.3} r={r * 0.44} fill={look.hair} />
+          <Circle cx={cx - r * 0.14} cy={cy - r * 1.42} r={r * 0.12} fill="rgba(255,255,255,0.22)" />
+          <Ellipse cx={cx} cy={cy - r * 1.14} rx={r * 0.34} ry={r * 0.11} fill={BLUSH} />
+        </G>
+      );
+    case 'long':
+      return (
+        <G>
+          <Path
+            d={`M${cx - r * 1.12} ${cy + r * 1.05} Q${cx - r * 1.32} ${cy - r * 1.25} ${cx} ${cy - r * 1.18} Q${cx + r * 1.32} ${cy - r * 1.25} ${cx + r * 1.12} ${cy + r * 1.05} Q${cx + r * 0.9} ${cy + r * 1.22} ${cx + r * 0.72} ${cy + r * 1.02} Q${cx} ${cy + r * 0.6} ${cx - r * 0.72} ${cy + r * 1.02} Q${cx - r * 0.9} ${cy + r * 1.22} ${cx - r * 1.12} ${cy + r * 1.05} Z`}
+            fill={look.hair}
+          />
+          <Circle cx={cx - r * 1.08} cy={cy + r * 1.0} r={r * 0.2} fill={look.hair} />
+          <Circle cx={cx + r * 1.08} cy={cy + r * 1.0} r={r * 0.2} fill={look.hair} />
+        </G>
+      );
     default:
       return null;
   }
+}
+
+const CROWN = [
+  { k: -0.86, petal: '#F7B7C5' },
+  { k: -0.46, petal: '#FFFDF6' },
+  { k: 0, petal: '#CDBBF0' },
+  { k: 0.46, petal: '#FFFDF6' },
+  { k: 0.86, petal: '#F7B7C5' },
+];
+
+/** Little daisies along the top of the head with leaves in between. */
+function FlowerCrown({ cx, cy, r }: { cx: number; cy: number; r: number }) {
+  const at = (k: number) => ({ x: cx + k * r * 1.0, y: cy - r * Math.sqrt(1 - k * k * 0.82) * 1.0 });
+  return (
+    <G>
+      {[-0.66, -0.23, 0.23, 0.66].map((k) => {
+        const { x, y } = at(k);
+        return <Ellipse key={k} cx={x} cy={y} rx={r * 0.17} ry={r * 0.08} fill="#7DBF5E" transform={`rotate(${k * 60} ${x} ${y})`} />;
+      })}
+      {CROWN.map(({ k, petal }) => {
+        const { x, y } = at(k);
+        const size = k === 0 ? r * 0.17 : r * 0.14;
+        return (
+          <G key={k}>
+            {[0, 1, 2, 3, 4].map((i) => {
+              const a = (i / 5) * Math.PI * 2 - Math.PI / 2;
+              return <Circle key={i} cx={x + Math.cos(a) * size} cy={y + Math.sin(a) * size} r={size * 0.8} fill={petal} stroke="rgba(91,70,54,0.12)" strokeWidth={r * 0.02} />;
+            })}
+            <Circle cx={x} cy={y} r={size * 0.62} fill="#F9DC7A" />
+          </G>
+        );
+      })}
+    </G>
+  );
 }
 
 /** Front layer: fringe, hats and the face details. */
@@ -72,10 +154,28 @@ function HeadFront({ cx, cy, r, look, reading }: { cx: number; cy: number; r: nu
     look.hairStyle === 'short'
       ? `M${cx - r} ${cy - r * 0.05} Q${cx - r * 0.95} ${cy - r * 1.05} ${cx} ${cy - r * 1.02} Q${cx + r * 0.95} ${cy - r * 1.05} ${cx + r} ${cy - r * 0.05} Q${cx + r * 0.7} ${cy - r * 0.45} ${cx + r * 0.1} ${cy - r * 0.42} Q${cx - r * 0.6} ${cy - r * 0.62} ${cx - r} ${cy - r * 0.05} Z`
       : `M${cx - r * 1.02} ${cy + r * 0.05} Q${cx - r} ${cy - r * 1.08} ${cx} ${cy - r * 1.04} Q${cx + r} ${cy - r * 1.08} ${cx + r * 1.02} ${cy + r * 0.05} Q${cx + r * 0.75} ${cy - r * 0.3} ${cx + r * 0.35} ${cy - r * 0.32} Q${cx} ${cy - r * 0.48} ${cx - r * 0.35} ${cy - r * 0.32} Q${cx - r * 0.75} ${cy - r * 0.3} ${cx - r * 1.02} ${cy + r * 0.05} Z`;
-  const hooded = look.headwear === 'bunnyHood' || look.headwear === 'bearHood';
+  const hooded = isHood(look.headwear);
+  const wear = look.wear ?? look.outfit;
   return (
     <G>
-      {hooded ? (
+      {look.headwear === 'cap' ? (
+        <G>
+          <Path d={`M${cx - r * 0.98} ${cy - r * 0.3} Q${cx - r * 1.08} ${cy + r * 0.12} ${cx - r * 0.86} ${cy + r * 0.28}`} stroke={look.hair} strokeWidth={r * 0.22} strokeLinecap="round" fill="none" />
+          <Path d={`M${cx + r * 0.98} ${cy - r * 0.3} Q${cx + r * 1.08} ${cy + r * 0.12} ${cx + r * 0.86} ${cy + r * 0.28}`} stroke={look.hair} strokeWidth={r * 0.22} strokeLinecap="round" fill="none" />
+          <Path d={`M${cx - r * 1.04} ${cy - r * 0.3} Q${cx - r * 1.04} ${cy - r * 1.34} ${cx} ${cy - r * 1.32} Q${cx + r * 1.04} ${cy - r * 1.34} ${cx + r * 1.04} ${cy - r * 0.3} Z`} fill={wear} />
+          <Path d={`M${cx} ${cy - r * 1.3} L${cx} ${cy - r * 0.42}`} stroke="rgba(255,255,255,0.45)" strokeWidth={r * 0.06} strokeLinecap="round" />
+          <Circle cx={cx} cy={cy - r * 1.32} r={r * 0.13} fill={wear} stroke="rgba(255,255,255,0.6)" strokeWidth={r * 0.05} />
+          <Ellipse cx={cx - r * 0.45} cy={cy - r * 0.82} rx={r * 0.2} ry={r * 0.11} fill="#8BCB6B" transform={`rotate(-30 ${cx - r * 0.45} ${cy - r * 0.82})`} />
+          <Path
+            d={`M${cx - r * 1.08} ${cy - r * 0.3} Q${cx - r * 0.1} ${cy - r * 0.56} ${cx + r * 1.55} ${cy - r * 0.2} Q${cx + r * 0.85} ${cy + r * 0.04} ${cx - r * 1.08} ${cy - r * 0.3} Z`}
+            fill={wear}
+          />
+          <Path
+            d={`M${cx - r * 1.08} ${cy - r * 0.3} Q${cx - r * 0.1} ${cy - r * 0.56} ${cx + r * 1.55} ${cy - r * 0.2} Q${cx + r * 0.85} ${cy + r * 0.04} ${cx - r * 1.08} ${cy - r * 0.3} Z`}
+            fill="rgba(74,58,46,0.14)"
+          />
+        </G>
+      ) : hooded ? (
         <Path
           d={`M${cx - r * 0.95} ${cy - r * 0.15} Q${cx - r * 0.7} ${cy - r * 0.95} ${cx} ${cy - r * 0.95} Q${cx + r * 0.7} ${cy - r * 0.95} ${cx + r * 0.95} ${cy - r * 0.15} Q${cx + r * 0.4} ${cy - r * 0.45} ${cx} ${cy - r * 0.42} Q${cx - r * 0.4} ${cy - r * 0.45} ${cx - r * 0.95} ${cy - r * 0.15} Z`}
           fill={look.hair}
@@ -91,6 +191,7 @@ function HeadFront({ cx, cy, r, look, reading }: { cx: number; cy: number; r: nu
       ) : (
         <Path d={fringe} fill={look.hair} />
       )}
+      {look.headwear === 'flowerCrown' ? <FlowerCrown cx={cx} cy={cy} r={r} /> : null}
       {reading ? (
         <G>
           <Path d={`M${cx - eyeDx - r * 0.13} ${eyeY} Q${cx - eyeDx} ${eyeY + r * 0.13} ${cx - eyeDx + r * 0.13} ${eyeY}`} stroke={INK} strokeWidth={r * 0.08} strokeLinecap="round" fill="none" />
@@ -138,7 +239,7 @@ export const AvatarPortrait = memo(function AvatarPortrait({ id, size = 64 }: { 
       </View>
     );
   }
-  const body = look.headwear === 'bunnyHood' || look.headwear === 'bearHood' ? (look.wear ?? look.outfit) : look.outfit;
+  const body = isHood(look.headwear) ? (look.wear ?? look.outfit) : look.outfit;
   const tallEars = look.headwear === 'bunnyHood';
   return (
     <Svg width={size} height={size} viewBox="0 0 100 100">
@@ -153,8 +254,7 @@ export const AvatarPortrait = memo(function AvatarPortrait({ id, size = 64 }: { 
 export const AvatarReading = memo(function AvatarReading({ id, size = 40 }: { id: AvatarId; size?: number }) {
   const look = AVATARS[id].person;
   if (!look) return null;
-  const hooded = look.headwear === 'bunnyHood' || look.headwear === 'bearHood';
-  const body = hooded ? (look.wear ?? look.outfit) : look.outfit;
+  const body = isHood(look.headwear) ? (look.wear ?? look.outfit) : look.outfit;
   return (
     <Svg width={size} height={size} viewBox="0 0 60 60">
       <Ellipse cx={30} cy={56.5} rx={17} ry={3.2} fill="rgba(91,70,54,0.18)" />

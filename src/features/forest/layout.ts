@@ -12,8 +12,13 @@ export interface Plantable {
   gardenY?: number;
 }
 
-/** Largest garden edge (tiles); also the bound of `garden_x/garden_y` in the database. */
-export const GARDEN_MAX = 12;
+/**
+ * Technical bound of a garden edge (tiles) and of `garden_x/garden_y` in the database (migration 0006).
+ * 땅 넓히기 has no product limit; this only keeps coordinates sane.
+ */
+export const GARDEN_MAX = 1000;
+/** The 0004 database check (`garden_x/garden_y between 0 and 11`) until migration 0006 is applied. */
+export const LEGACY_GARDEN_MAX = 12;
 export const GARDEN_MIN = 3;
 
 export function validGardenCoord(value: unknown): value is number {

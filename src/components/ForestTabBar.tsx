@@ -19,12 +19,20 @@ export const TAB_ICONS: Record<string, string> = {
 /** Wooden-plank tab bar with puffy bubbles; hosts the free-tier banner slot above it. */
 export function ForestTabBar({ state, descriptors, navigation }: BottomTabBarProps) {
   const insets = useSafeAreaInsets();
+  const isMainTab = (name: string) => name in TAB_ICONS;
+  // Hidden tabs (e.g. the gallery) keep the tab the user came from highlighted.
+  const current = state.routes[state.index];
+  const activeKey = isMainTab(current.name)
+    ? current.key
+    : ([...state.history].reverse().find((h) => h.type === 'route' && state.routes.some((r) => r.key === h.key && isMainTab(r.name)))?.key ??
+      state.routes[0].key);
   return (
     <View style={styles.outer}>
       <BannerAdPlaceholder />
       <View style={[styles.bar, { marginBottom: Math.max(insets.bottom, spacing.sm) }]}>
-        {state.routes.map((route, index) => {
-          const focused = state.index === index;
+        {state.routes.filter((route) => isMainTab(route.name)).map((route) => {
+          const focused = route.key === activeKey;
+          const selected = route.key === current.key;
           const { options } = descriptors[route.key];
           const label = typeof options.title === 'string' ? options.title : route.name;
           return (
@@ -35,7 +43,7 @@ export function ForestTabBar({ state, descriptors, navigation }: BottomTabBarPro
               accessibilityLabel={label}
               onPress={() => {
                 const event = navigation.emit({ type: 'tabPress', target: route.key, canPreventDefault: true });
-                if (!focused && !event.defaultPrevented) {
+                if (!selected && !event.defaultPrevented) {
                   tapFeedback();
                   navigation.navigate(route.name, route.params);
                 }

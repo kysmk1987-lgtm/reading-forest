@@ -1,5 +1,5 @@
 -- 독서의숲 Supabase 전체 설정 (자동 생성: npm run build:sql)
--- 새 프로젝트의 SQL Editor에 통째로 붙여넣고 Run 하세요. 포함된 마이그레이션: 0001_init.sql, 0002_focus_minutes.sql, 0003_gallery.sql, 0004_garden_reviews.sql, 0005_profile_forest_avatar.sql
+-- 새 프로젝트의 SQL Editor에 통째로 붙여넣고 Run 하세요. 포함된 마이그레이션: 0001_init.sql, 0002_focus_minutes.sql, 0003_gallery.sql, 0004_garden_reviews.sql, 0005_profile_forest_avatar.sql, 0006_garden_unlimited.sql
 -- 이미 일부를 적용했다면 아직 적용하지 않은 supabase/setup_<번호>.sql 파일만 실행하세요.
 
 -- ═══════════════ 0001_init.sql ═══════════════
@@ -894,3 +894,17 @@ alter table public.profiles
   add column if not exists avatar text check (avatar is null or avatar ~ '^[a-z][a-z0-9_-]{0,31}$');
 
 grant update (forest_name, avatar) on public.profiles to authenticated;
+
+-- ═══════════════ 0006_garden_unlimited.sql ═══════════════
+-- 8차: 땅 넓히기 무제한
+--
+--   · 0004에서 user_books.garden_x / garden_y를 0~11로 막았던 check를 0~999로 넓힙니다 (앱의 GARDEN_MAX = 1000).
+--   · 적용 전에는 앱이 12칸을 넘는 위치만 빼고 동기화합니다(그 나무 위치는 이 기기에만 저장).
+
+alter table public.user_books
+  drop constraint if exists user_books_garden_x_check,
+  drop constraint if exists user_books_garden_y_check;
+
+alter table public.user_books
+  add constraint user_books_garden_x_check check (garden_x is null or garden_x between 0 and 999),
+  add constraint user_books_garden_y_check check (garden_y is null or garden_y between 0 and 999);

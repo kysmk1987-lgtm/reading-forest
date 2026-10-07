@@ -31,7 +31,7 @@ grant select, insert, delete on storage.objects to authenticated;
 grant select on storage.buckets to anon, authenticated;
 grant execute on function storage.foldername(text) to anon, authenticated;
 `);
-for (const f of ['0001_init.sql', '0002_focus_minutes.sql', '0003_gallery.sql', '0004_garden_reviews.sql']) {
+for (const f of ['0001_init.sql', '0002_focus_minutes.sql', '0003_gallery.sql', '0004_garden_reviews.sql', '0005_profile_forest_avatar.sql', '0006_garden_unlimited.sql']) {
   await db.exec(readFileSync(repo + f, 'utf8'));
   console.log('applied', f);
 }

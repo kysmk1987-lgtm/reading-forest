@@ -1,7 +1,7 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
 
-import { DEFAULT_CRITTER, type Critter } from '@/features/forest/critters';
+import { DEFAULT_CRITTERS, normalizeCritters, type CritterKind } from '@/features/forest/critters';
 import type { Weather } from '@/features/forest/WeatherLayer';
 import { persistStorage } from '@/lib/storage';
 
@@ -20,16 +20,18 @@ interface ForestState {
   /** Local/demo watering counters keyed by forest id. */
   waterings: Record<string, LocalWatering>;
   setWeather: (weather: Weather) => void;
-  /** Little creatures wandering at the front of the garden. */
-  critter: Critter;
-  setCritter: (critter: Critter) => void;
-  /** Extra rows/columns of empty land the reader added (땅 넓히기). */
+  /** Little creatures wandering at the front of the garden (any combination, empty = nobody). */
+  critters: CritterKind[];
+  setCritters: (critters: CritterKind[]) => void;
+  /** Extra rows/columns of empty land the reader added (땅 넓히기, no upper limit). */
   gardenExtra: number;
   expandGarden: () => void;
   setGardenExtra: (extra: number) => void;
   /** Records a local watering; returns false if this forest was already watered on `day`. */
   waterLocal: (forestId: string, day: string) => boolean;
 }
+
+const cleanExtra = (extra: number) => (Number.isFinite(extra) ? Math.max(0, Math.floor(extra)) : 0);
 
 export const useForestStore = create<ForestState>()(
   persist(
@@ -40,11 +42,11 @@ export const useForestStore = create<ForestState>()(
       weather: 'clear',
       waterings: {},
       setWeather: (weather) => set({ weather }),
-      critter: DEFAULT_CRITTER,
-      setCritter: (critter) => set({ critter }),
+      critters: [...DEFAULT_CRITTERS],
+      setCritters: (critters) => set({ critters: normalizeCritters(critters) }),
       gardenExtra: 0,
-      expandGarden: () => set((s) => ({ gardenExtra: Math.min(6, s.gardenExtra + 1) })),
-      setGardenExtra: (extra) => set({ gardenExtra: Math.min(6, Math.max(0, extra)) }),
+      expandGarden: () => set((s) => ({ gardenExtra: cleanExtra(s.gardenExtra) + 1 })),
+      setGardenExtra: (extra) => set({ gardenExtra: cleanExtra(extra) }),
       waterLocal: (forestId, day) => {
         const current = get().waterings[forestId] ?? { count: 0 };
         if (current.lastDay === day) return false;
@@ -52,6 +54,19 @@ export const useForestStore = create<ForestState>()(
         return true;
       },
     }),
-    { name: 'rf-forest', storage: persistStorage },
+    {
+      name: 'rf-forest',
+      storage: persistStorage,
+      version: 1,
+      migrate: (persisted, version) => {
+        const state = (persisted ?? {}) as Partial<ForestState> & { critter?: unknown };
+        // v1: one critter (`critter: 'butterfly' | 'none' | …`) → any combination (`critters: [...]`).
+        if (version < 1) {
+          state.critters = normalizeCritters(state.critter ?? DEFAULT_CRITTERS);
+          delete state.critter;
+        }
+        return state as ForestState;
+      },
+    },
   ),
 );

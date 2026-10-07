@@ -1,5 +1,5 @@
 import type { Book, LibraryEntry, ReadingLog, ReadingStatus, TreeSpeciesId } from '@/types';
-import { validGardenCoord } from '@/features/forest/layout';
+import { LEGACY_GARDEN_MAX, validGardenCoord } from '@/features/forest/layout';
 import { TREE_SPECIES_IDS } from '@/types';
 
 /** Row shapes of `supabase/migrations/0001_init.sql` (snake_case, timestamps as ISO strings). */
@@ -136,6 +136,12 @@ export function entryToRow(entry: LibraryEntry, userId: string): UserBookRow {
 export function withoutGardenColumns(row: UserBookRow): UserBookRow {
   const { garden_x: _x, garden_y: _y, ...rest } = row;
   return rest;
+}
+
+/** Drops tiles beyond the 0004 check (0–11) so a project without migration 0006 still accepts the row. */
+export function withLegacyGardenColumns(row: UserBookRow): UserBookRow {
+  const fits = (v: number | null | undefined) => v == null || v < LEGACY_GARDEN_MAX;
+  return fits(row.garden_x) && fits(row.garden_y) ? row : withoutGardenColumns(row);
 }
 function speciesOrUndefined(value: string | null | undefined): TreeSpeciesId | undefined {
   return value && (TREE_SPECIES_IDS as readonly string[]).includes(value) ? (value as TreeSpeciesId) : undefined;

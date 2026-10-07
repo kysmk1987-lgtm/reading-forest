@@ -2,7 +2,7 @@ import { memo, useEffect, useState, type ReactElement } from 'react';
 import { Animated, Easing, Platform, StyleSheet, View } from 'react-native';
 import Svg, { Circle, Ellipse, Path } from 'react-native-svg';
 
-import type { Critter } from './critters';
+import type { CritterKind } from './critters';
 
 const useNativeDriver = Platform.OS !== 'web';
 
@@ -114,7 +114,7 @@ export const FireflyArt = memo(function FireflyArt({ size }: ArtProps) {
   );
 });
 
-export function CritterIcon({ kind, size = 16 }: { kind: Exclude<Critter, 'none'>; size?: number }) {
+export function CritterIcon({ kind, size = 16 }: { kind: CritterKind; size?: number }) {
   switch (kind) {
     case 'butterfly':
       return <ButterflyArt size={size} />;
@@ -366,7 +366,7 @@ function Firefly({ spot, index }: MoverProps) {
   );
 }
 
-const MOVERS: Record<Exclude<Critter, 'none'>, { count: number; Component: (p: MoverProps) => ReactElement }> = {
+const MOVERS: Record<CritterKind, { count: number; Component: (p: MoverProps) => ReactElement }> = {
   butterfly: { count: 2, Component: Butterfly },
   ladybug: { count: 2, Component: Ladybug },
   frog: { count: 2, Component: Frog },
@@ -375,15 +375,24 @@ const MOVERS: Record<Exclude<Critter, 'none'>, { count: number; Component: (p: M
   firefly: { count: 6, Component: Firefly },
 };
 
+/** Fireflies are tiny, so they come in a swarm; with company the swarm shrinks to keep the scene (and the frame budget) light. */
+function countFor(kind: CritterKind, kinds: number) {
+  return kind === 'firefly' && kinds > 1 ? 3 : MOVERS[kind].count;
+}
+
 /** Ambient creatures at the front of the garden (pointer-transparent, transforms only). */
-export function CritterLayer({ kind, spots }: { kind: Critter; spots: CritterSpot[] }) {
-  if (kind === 'none' || !spots.length) return null;
-  const { count, Component } = MOVERS[kind];
+export function CritterLayer({ kinds, spots }: { kinds: readonly CritterKind[]; spots: CritterSpot[] }) {
+  if (!kinds.length || !spots.length) return null;
+  let next = 0;
   return (
     <View style={[StyleSheet.absoluteFill, styles.layer]}>
-      {Array.from({ length: count }, (_, i) => (
-        <Component key={`${kind}-${i}`} spot={spots[i % spots.length]} index={i} />
-      ))}
+      {kinds.map((kind) => {
+        const { Component } = MOVERS[kind];
+        return Array.from({ length: countFor(kind, kinds.length) }, (_, i) => {
+          const slot = next++;
+          return <Component key={`${kind}-${i}`} spot={spots[slot % spots.length]} index={slot} />;
+        });
+      })}
     </View>
   );
 }

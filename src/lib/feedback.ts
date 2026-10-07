@@ -1,43 +1,9 @@
-import { createAudioPlayer, type AudioPlayer } from 'expo-audio';
 import * as Haptics from 'expo-haptics';
 import { Platform } from 'react-native';
 
 import { useSettingsStore } from '@/stores/settingsStore';
 
-const SOURCES = {
-  tap: require('../../assets/sounds/tap.wav'),
-  grow: require('../../assets/sounds/grow.wav'),
-  water: require('../../assets/sounds/water.wav'),
-  chime: require('../../assets/sounds/chime.wav'),
-  dig: require('../../assets/sounds/dig.wav'),
-};
-type SoundName = keyof typeof SOURCES;
-
-const players: Partial<Record<SoundName, AudioPlayer>> = {};
-let audioUnavailable = false;
-
-/** Browsers reject play() (as an unhandled rejection) until the page has had a user gesture. */
-function webAudioBlocked() {
-  if (Platform.OS !== 'web' || typeof navigator === 'undefined') return false;
-  const activation = (navigator as Navigator & { userActivation?: { hasBeenActive: boolean } }).userActivation;
-  return activation ? !activation.hasBeenActive : false;
-}
-
-function playSound(name: SoundName, volume = 0.5) {
-  if (audioUnavailable || webAudioBlocked()) return;
-  try {
-    let player = players[name];
-    if (!player) {
-      player = createAudioPlayer(SOURCES[name]);
-      player.volume = volume;
-      players[name] = player;
-    }
-    player.seekTo(0).catch(() => {});
-    player.play();
-  } catch {
-    audioUnavailable = true;
-  }
-}
+import { playSound } from './sfx';
 
 /** Haptics are always on where the device supports them (native only). */
 function vibrate(style: Haptics.ImpactFeedbackStyle) {
@@ -54,8 +20,8 @@ const soundOn = () => useSettingsStore.getState().soundEnabled;
 
 /** Light tap feedback (sound + haptics) for buttons, chips and tabs. */
 export function tapFeedback(kind: 'light' | 'medium' = 'light') {
-  vibrate(kind === 'medium' ? Haptics.ImpactFeedbackStyle.Medium : Haptics.ImpactFeedbackStyle.Light);
   if (soundOn()) playSound('tap');
+  vibrate(kind === 'medium' ? Haptics.ImpactFeedbackStyle.Medium : Haptics.ImpactFeedbackStyle.Light);
 }
 
 export function successFeedback() {

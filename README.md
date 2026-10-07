@@ -152,7 +152,7 @@ npx vercel --prod --yes                                                         
 | Storage `cards`(비공개) · `cards-blur`(공개) | 카드 원본 PNG · 아주 작게 흐린 썸네일 | 업로드는 `내 uid/` 폴더에만. 원본은 **볼 수 있는 사람만** 서명 URL 발급 |
 | `book_reviews` (6차) | 책 리뷰(ISBN · 별점 0.5 단위 · 500자 · 닉네임), 사람당 책 하나에 하나 | 직접 조회·삭제는 **본인만**. 작성은 `upsert_book_review()`, 다른 사람 리뷰는 `book_review_summary()` · `book_reviews_feed()` RPC로만 봄 |
 | `book_review_reports` (6차) | 리뷰 신고 | 남의 리뷰만 신고, 3번 신고되면 자동 숨김 |
-| `user_books.garden_x/garden_y` (6차) | 숲에서 나무가 심긴 칸(0~11) | `user_books`와 같음 |
+| `user_books.garden_x/garden_y` (6차) | 숲에서 나무가 심긴 칸(0~11, 0006 적용 후 0~999) | `user_books`와 같음 |
 
 - `get_public_forest(slug)` RPC: 공개 숲 페이지용(나무·물 준 횟수만, 한줄평/별점은 노출 안 함)
 - `monthly_reading_stats` 뷰: 월별 독서한 날·쪽수·완독 수 (통계/독서 결산용)
@@ -202,12 +202,12 @@ src/
 ├─ app/                     # Expo Router 라우트 (파일 = 화면)
 │  ├─ _layout.tsx           # 폰트·QueryClient·Auth 리스너·Stack, 웹에서는 모바일 폭(480px)으로 중앙 정렬
 │  ├─ (tabs)/               # 하단 탭: 숲(index) · 서재 · 기록(records: 캘린더·통계) · 함께 읽기(together) · 마이
+│  │  └─ gallery.tsx        # 문장 갤러리 피드 (최신/인기/스크랩/내 카드, 책 필터) — 숨김 탭(href: null)이라 탭바·광고가 그대로 보임, 주소는 /gallery
 │  ├─ room/[id].tsx         # 테마 독서실 (일러스트 + 같은 방 독서가 + 미니 타이머)
 │  ├─ search.tsx            # 책 검색 (입력창 하나: 제목/저자/출판사, ISBN을 넣어도 검색) + 베스트셀러 추천
 │  ├─ book/[id].tsx         # 책 상세 + 서재 담기 + 책 소개 | 리뷰 탭
 │  ├─ forest/[userId].tsx   # 공개 숲 페이지 (읽기 전용 + 물 주기), /forest/demo = 데모 숲
 │  ├─ trees.tsx             # 나무 도감 (종류별 성장 단계)
-│  ├─ gallery.tsx           # 문장 갤러리 피드 (최신/인기/스크랩/내 카드, 책 필터)
 │  ├─ card/new.tsx          # 문구 카드 만들기 (템플릿 · 글꼴 · 비율 · 저장/공유/올리기)
 │  ├─ card/[id].tsx         # 카드 상세 (스포일러 펼치기 · 좋아요 · 스크랩 · 댓글 · 신고)
 │  └─ wrapped.tsx           # 독서 DNA 결산 (스토리 슬라이드 · 페르소나 · 요약 카드 내보내기)
@@ -235,7 +235,7 @@ src/
 │  ├─ api/books.ts          # 지역별 검색 클라이언트 (KR → /api 프록시)
 │  ├─ api/global/           # 해외용 Google Books · Open Library (BOOK_REGION=GLOBAL일 때만)
 │  ├─ i18n/                 # i18next 초기화 + locales/ko.ts(활성), en.ts(비활성)
-│  ├─ supabase.ts · feedback.ts(사운드+햅틱) · entitlements.ts(무료/프리미엄)
+│  ├─ supabase.ts · feedback.ts(사운드+햅틱) · sfx.ts(앱: 미리 만든 expo-audio 플레이어) · sfx.web.ts(웹: Web Audio + 미리 디코딩) · entitlements.ts(무료/프리미엄)
 │  └─ confirm.ts · date.ts · storage.ts · queryClient.ts
 ├─ stores/                  # Zustand: library(+독서 로그), profile, settings, bookCache, forest(날씨·물 주기), celebration
 ├─ theme/                   # colors · typography · spacing(radius) · shadows
@@ -260,7 +260,7 @@ vercel.json                 # 빌드 설정, /api 제외 SPA 리라이트, 함�
   <img src="docs/screenshots/records-layout.png" width="160" alt="기록 탭" />
 </p>
 
-- **나무 옮겨 심기** (홈 숲 → 🪴 옮겨 심기): 나무를 누르고 빈 칸을 누르면 이동, 다른 나무를 누르면 자리 교환, 끌어다 놓아도 돼요. 옮길 수 있는 칸이 점선으로 보이고 흙·삽 애니메이션과 "푹" 소리가 납니다. **➕ 땅 넓히기**로 빈 칸을 늘릴 수 있어요(최대 12×12). 위치는 이 기기(서재 스토어 버전 2)와 `user_books.garden_x/garden_y`에 저장되고 공개 숲 페이지도 같은 배치로 보여요. 위치가 없는 나무는 예전처럼 가운데부터 채워집니다.
+- **나무 옮겨 심기** (홈 숲 → 🪴 옮겨 심기): 나무를 누르고 빈 칸을 누르면 이동, 다른 나무를 누르면 자리 교환, 끌어다 놓아도 돼요. 옮길 수 있는 칸이 점선으로 보이고 흙·삽 애니메이션과 "푹" 소리가 납니다. **➕ 땅 넓히기**로 빈 칸을 제한 없이 늘릴 수 있고, 숲이 카드보다 커지면 끌어서 상하좌우로 둘러봐요. 위치는 이 기기(서재 스토어 버전 2)와 `user_books.garden_x/garden_y`에 저장되고 공개 숲 페이지도 같은 배치로 보여요. 위치가 없는 나무는 예전처럼 가운데부터 채워집니다.
 - **프리미엄 나무 7종**: 은행나무(부채꼴 노란 잎 · 은행), 자작나무(흰 줄기 · 꽃차례), 야자수(휜 줄기 · 코코넛), 목련(큰 꽃) 추가. 모든 성장 단계에 고유한 모양이 있고, 도감에 👑 프리미엄 배지가 붙어요. 종류 목록은 `features/forest/species.ts`의 데이터 하나로 관리합니다.
 - **책 리뷰** (책 상세 → 책 소개 | 리뷰 탭): 평균 · 개수 · 별점 분포, 닉네임 · 별점 · 날짜 · 내용 목록, 더보기 메뉴(내 리뷰는 수정/삭제, 남의 리뷰는 신고), 반 별점 + 500자. 기록 시트의 별점·한줄평은 마이의 **한줄평 공개 범위**(기본 전체 공개)에 따라 자동으로 리뷰에 올라가요. Supabase가 없으면 내 기록만 보여줍니다.
 - **검색**: ISBN 탭과 바코드 버튼을 없애고 입력창 하나로 통일(ISBN을 넣으면 알아서 ISBN 검색). 검색 전 화면에 **베스트셀러 추천** 그리드.
@@ -283,7 +283,7 @@ vercel.json                 # 빌드 설정, /api 제외 SPA 리라이트, 함�
   - 꾸미기: 템플릿 6종(종이 · 숲 · 밤하늘 · 수채화 무료, 벚꽃 · 바다 프리미엄🔒), 글꼴 6종(송명체 · 나눔손글씨 펜 · 주아체 무료, 개구체 · 연성체 · 도현체 프리미엄🔒), 글자 크기 S/M/L, 정렬, 책 제목·저자 표시, 작은 "🌳 독서의숲" 워터마크. 비율 **9:16 · 1:1 · 4:5**.
   - **이미지 저장/공유**: 웹은 html-to-image로 1080px PNG를 만들고 글꼴을 base64로 넣어서 굽습니다. 공유는 Web Share(파일) → 안 되면 다운로드. 앱은 react-native-view-shot + expo-sharing / expo-media-library(사진첩 저장).
   - 글꼴은 모두 [Google Fonts](https://fonts.google.com/)의 SIL Open Font License(OFL) 글꼴이고, 처음 고를 때만 불러옵니다.
-- **문장 갤러리** (`app/gallery.tsx`, `app/card/[id].tsx`): 최신/인기(좋아요 + 스크랩×2 + 댓글) 피드, 책별 필터, 카드 상세에서 좋아요 · 스크랩 · 댓글(삭제는 내 것만) · 신고(내 피드에서 바로 숨김, 3번 신고되면 모두에게 숨김) · 내 카드 삭제.
+- **문장 갤러리** (`app/(tabs)/gallery.tsx`, `app/card/[id].tsx`): 최신/인기(좋아요 + 스크랩×2 + 댓글) 피드, 책별 필터, 카드 상세에서 좋아요 · 스크랩 · 댓글(삭제는 내 것만) · 신고(내 피드에서 바로 숨김, 3번 신고되면 모두에게 숨김) · 내 카드 삭제.
 - **스마트 블러 (스포일러 방지)**
   - 카드를 올릴 때 **문장 위치**(쪽 또는 %)를 꼭 받아요. 쪽은 전체 쪽수로 %로 바꿉니다(전체 쪽수를 모르면 %로 입력).
   - 내 진도가 카드 위치보다 낮으면 흐리게 + "아직 읽지 않은 부분이에요 (60% 지점)". **그래도 볼래요** → 확인 후 펼치기.

@@ -95,7 +95,7 @@ export default function CardDetailScreen() {
       showToast(t('gallery.reported'));
       void qc.invalidateQueries({ queryKey: ['gallery'] });
       if (router.canGoBack()) router.back();
-      else router.replace('/gallery');
+      else router.navigate('/gallery');
     } catch {
       showToast(t('gallery.actionFailed'));
     }
@@ -108,7 +108,7 @@ export default function CardDetailScreen() {
       await deleteCard(c);
       showToast(t('gallery.deleted'));
       void qc.invalidateQueries({ queryKey: ['gallery'] });
-      router.replace('/gallery');
+      router.navigate('/gallery');
     } catch {
       showToast(t('gallery.actionFailed'));
     }
@@ -132,14 +132,14 @@ export default function CardDetailScreen() {
   return (
     <Screen
       title={t('gallery.detailTitle')}
-      headerLeft={<IconButton name="chevron-back" accessibilityLabel={t('common.back')} onPress={() => (router.canGoBack() ? router.back() : router.replace('/gallery'))} />}>
+      headerLeft={<IconButton name="chevron-back" accessibilityLabel={t('common.back')} onPress={() => (router.canGoBack() ? router.back() : router.navigate('/gallery'))} />}>
       {card.isLoading ? (
         <ActivityIndicator color={palette.leafDeep} />
       ) : !c ? (
         <EmptyState
           emoji={card.error && isMissingSchemaError(card.error) ? '🛠️' : '🍂'}
           title={card.error && isMissingSchemaError(card.error) ? t('gallery.notReady') : t('gallery.notFound')}
-          action={<Button size="sm" variant="soft" label={t('gallery.title')} onPress={() => router.replace('/gallery')} />}
+          action={<Button size="sm" variant="soft" label={t('gallery.title')} onPress={() => router.navigate('/gallery')} />}
         />
       ) : (
         <>
@@ -170,7 +170,7 @@ export default function CardDetailScreen() {
 
           <Pressable
             accessibilityRole="button"
-            onPress={() => (c.isbn13 ? router.push({ pathname: '/gallery', params: { isbn: c.isbn13 } }) : undefined)}
+            onPress={() => (c.isbn13 ? router.navigate({ pathname: '/gallery', params: { isbn: c.isbn13 } }) : undefined)}
             style={styles.book}>
             <BookCover uri={c.book_cover ?? undefined} title={c.book_title} width={46} />
             <View style={styles.flex}>

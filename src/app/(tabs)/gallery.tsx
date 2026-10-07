@@ -15,6 +15,8 @@ import { MAX_APP_WIDTH, palette, spacing } from '@/theme';
 
 type Tab = 'latest' | 'popular' | 'scraps' | 'mine';
 
+const tabFromParam = (value?: string): Tab => (['latest', 'popular', 'scraps', 'mine'].includes(value ?? '') ? (value as Tab) : 'latest');
+
 function tabQuery(tab: Tab): { sort: FeedSort; scope: FeedScope } {
   if (tab === 'popular') return { sort: 'popular', scope: 'all' };
   if (tab === 'scraps') return { sort: 'latest', scope: 'scraps' };
@@ -39,8 +41,16 @@ export default function GalleryScreen() {
   const { t } = useTranslation();
   const params = useLocalSearchParams<{ tab?: string; isbn?: string }>();
   const { width } = useWindowDimensions();
-  const [tab, setTab] = useState<Tab>(() => (['latest', 'popular', 'scraps', 'mine'].includes(params.tab ?? '') ? (params.tab as Tab) : 'latest'));
+  const [tab, setTab] = useState<Tab>(() => tabFromParam(params.tab));
   const [isbn, setIsbn] = useState<string | null>(params.isbn ?? null);
+  // This screen stays mounted as a hidden tab, so later visits arrive as param changes, not a fresh mount.
+  const paramKey = `${params.tab ?? ''}|${params.isbn ?? ''}`;
+  const [seenParamKey, setSeenParamKey] = useState(paramKey);
+  if (paramKey !== seenParamKey) {
+    setSeenParamKey(paramKey);
+    setTab(tabFromParam(params.tab));
+    setIsbn(params.isbn ?? null);
+  }
   const blurUnowned = useSettingsStore((s) => s.blurUnownedQuotes);
   const entries = useLibraryStore((s) => s.entries);
   const myBooks = useMemo(

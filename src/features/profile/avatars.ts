@@ -1,11 +1,16 @@
 /** Profile avatars: the sprout (default, not a person) and little reader characters. */
-export const AVATAR_IDS = ['sprout', 'bob', 'short', 'glasses', 'beanie', 'bunny', 'bear', 'pigtails'] as const;
+export const AVATAR_IDS = ['sprout', 'bob', 'short', 'glasses', 'bun', 'cap', 'beanie', 'bunny', 'bear', 'pigtails', 'cat', 'flower'] as const;
 export type AvatarId = (typeof AVATAR_IDS)[number];
 
 export const DEFAULT_AVATAR: AvatarId = 'sprout';
 
-export type HairStyle = 'bob' | 'short' | 'curly' | 'pigtails' | 'tucked';
-export type Headwear = 'beanie' | 'bunnyHood' | 'bearHood';
+export type HairStyle = 'bob' | 'short' | 'curly' | 'pigtails' | 'tucked' | 'bun' | 'long';
+export type Headwear = 'beanie' | 'bunnyHood' | 'bearHood' | 'catHood' | 'cap' | 'flowerCrown';
+
+/** Hoods replace the hair outline and colour the body. */
+export function isHood(headwear: Headwear | undefined) {
+  return headwear === 'bunnyHood' || headwear === 'bearHood' || headwear === 'catHood';
+}
 
 export interface PersonLook {
   skin: string;
@@ -40,6 +45,23 @@ export const AVATARS: Record<AvatarId, AvatarDef> = {
   glasses: {
     premium: false,
     person: { skin: '#FCE3CF', hair: '#3D3A36', hairStyle: 'curly', outfit: '#9ED8F0', outfitDeep: '#5FB4D9', book: '#E7A174', glasses: true },
+  },
+  bun: {
+    premium: false,
+    person: { skin: '#F6D7BC', hair: '#6B4A33', hairStyle: 'bun', outfit: '#F4A9A0', outfitDeep: '#DE8378', book: '#8BCB6B' },
+  },
+  cap: {
+    premium: false,
+    person: {
+      skin: '#FCE3CF',
+      hair: '#4A3A2E',
+      hairStyle: 'short',
+      outfit: '#FFFDF6',
+      outfitDeep: '#9ED8F0',
+      book: '#F9DC7A',
+      headwear: 'cap',
+      wear: '#7CC4E4',
+    },
   },
   beanie: {
     premium: true,
@@ -83,6 +105,31 @@ export const AVATARS: Record<AvatarId, AvatarDef> = {
   pigtails: {
     premium: true,
     person: { skin: '#FCE3CF', hair: '#E7A174', hairStyle: 'pigtails', outfit: '#F7B7C5', outfitDeep: '#E58AA0', book: '#9ED8F0' },
+  },
+  cat: {
+    premium: true,
+    person: {
+      skin: '#FDE8D7',
+      hair: '#3D3A36',
+      hairStyle: 'tucked',
+      outfit: '#9A9AA8',
+      outfitDeep: '#7A7A8A',
+      book: '#F7B7C5',
+      headwear: 'catHood',
+      wear: '#B9B9C6',
+    },
+  },
+  flower: {
+    premium: true,
+    person: {
+      skin: '#FCE3CF',
+      hair: '#C98B5A',
+      hairStyle: 'long',
+      outfit: '#BFE3B4',
+      outfitDeep: '#8BCB6B',
+      book: '#CDBBF0',
+      headwear: 'flowerCrown',
+    },
   },
 };
 

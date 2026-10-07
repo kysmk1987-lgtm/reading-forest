@@ -7,7 +7,7 @@ import { BookCover } from '@/components/BookCover';
 import { GrowthBadge } from '@/components/GrowthBadge';
 import { AppText, Button, Card, IconButton, ProgressBar, Screen, showToast } from '@/components/ui';
 import { CritterIcon } from '@/features/forest/CritterLayer';
-import { CRITTERS, effectiveCritter, PREMIUM_CRITTERS } from '@/features/forest/critters';
+import { CRITTERS, effectiveCritters, PREMIUM_CRITTERS, toggleCritter } from '@/features/forest/critters';
 import { ForestGarden } from '@/features/forest/ForestGarden';
 import { layoutGarden, type Tile } from '@/features/forest/layout';
 import { treeFromEntry } from '@/features/forest/model';
@@ -49,8 +49,8 @@ export default function HomeScreen() {
   const plantTrees = useLibraryStore((s) => s.plantTrees);
   const forestName = useProfileStore((s) => s.forestName);
   const avatar = effectiveAvatar(useProfileStore((s) => s.avatar), isPremium);
-  const critter = effectiveCritter(useForestStore((s) => s.critter), can('premiumTrees'));
-  const setCritter = useForestStore((s) => s.setCritter);
+  const critters = effectiveCritters(useForestStore((s) => s.critters), can('premiumTrees'));
+  const setCritters = useForestStore((s) => s.setCritters);
   /** Layout when 옮겨 심기 started, so 초기화 can put everything back. */
   const [editStart, setEditStart] = useState<{ positions: Record<string, Tile>; extra: number } | null>(null);
 
@@ -125,7 +125,6 @@ export default function HomeScreen() {
               size="sm"
               variant="soft"
               label={`➕ ${t('forest.expand')}`}
-              disabled={gardenExtra >= 6}
               onPress={() => {
                 tapFeedback();
                 expandGarden();
@@ -146,7 +145,7 @@ export default function HomeScreen() {
           onTransplant={plantTrees}
           onOpenBook={(tree) => router.push({ pathname: '/book/[id]', params: { id: tree.bookId } })}
           onChangeSpecies={(tree) => setSpeciesFor(tree.id)}
-          critter={critter}
+          critters={critters}
           avatar={avatar}
         />
 
@@ -176,7 +175,7 @@ export default function HomeScreen() {
         <View style={styles.weatherRow}>
           {CRITTERS.map((c) => {
             const locked = PREMIUM_CRITTERS.includes(c) && !can('premiumTrees');
-            const active = critter === c;
+            const active = c === 'none' ? critters.length === 0 : critters.includes(c);
             return (
               <Pressable
                 key={c}
@@ -186,7 +185,7 @@ export default function HomeScreen() {
                 onPress={() => {
                   tapFeedback();
                   if (locked) showToast(t('forest.critterLocked'));
-                  else setCritter(c);
+                  else setCritters(toggleCritter(critters, c));
                 }}
                 style={[styles.weatherChip, styles.critterChip, active && styles.weatherActive, locked && styles.weatherLocked]}>
                 {c !== 'none' ? <CritterIcon kind={c} size={14} /> : null}
@@ -247,9 +246,8 @@ export default function HomeScreen() {
         <AppText variant="subtitle">{t('home.continueReading')}</AppText>
         {summary.reading.length === 0 ? (
           <Card style={styles.emptyCard}>
-            <AppText style={styles.emptyEmoji}>🌰</AppText>
             <AppText muted>{t('home.noReading')}</AppText>
-            <Button label={t('home.findBook')} onPress={() => router.push('/search')} />
+            <Button label={t('home.findBook')} onPress={() => router.push('/search')} style={styles.emptyButton} />
           </Card>
         ) : (
           summary.reading.slice(0, 3).map((e) => {
@@ -324,8 +322,8 @@ const styles = StyleSheet.create({
   },
   statEmoji: { fontSize: 20 },
   statValue: { fontSize: 24, color: colors.text },
-  emptyCard: { alignItems: 'center', gap: spacing.sm },
-  emptyEmoji: { fontSize: 36 },
+  emptyCard: { alignItems: 'center', gap: spacing.md, paddingVertical: spacing.lg },
+  emptyButton: { alignSelf: 'center' },
   readingRow: {
     flexDirection: 'row',
     gap: spacing.md,

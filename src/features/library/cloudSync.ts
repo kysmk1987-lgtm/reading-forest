@@ -13,6 +13,7 @@ import {
   planUpload,
   rowToEntry,
   rowToLog,
+  withLegacyGardenColumns,
   withoutGardenColumns,
   withoutSessionColumns,
   type BookRow,
@@ -45,6 +46,8 @@ async function upsertEntries(sb: SupabaseClient, userId: string, entries: Librar
   let { error } = await write(rows);
   // PGRST204: column not found — migration 0004 (garden_x/garden_y) is not applied yet.
   if (error?.code === 'PGRST204') ({ error } = await write(rows.map(withoutGardenColumns)));
+  // 23514: check violation — a tile beyond 11 on a project without migration 0006 (unlimited 땅 넓히기).
+  if (error?.code === '23514') ({ error } = await write(rows.map(withLegacyGardenColumns)));
   if (error) throw error;
 }
 
