@@ -56,8 +56,12 @@ export async function searchBooks(query: string, mode: SearchMode, signal?: Abor
 
 export interface BestsellerResult {
   books: Book[];
-  /** `data4library`: 도서관 정보나루 인기대출도서; `curated`: our hand-picked list of recent bestsellers. */
-  source: 'data4library' | 'curated';
+  /** `kyobo`: 교보문고 주간 종합; `data4library`: 도서관 정보나루 인기대출도서; `curated`: our hand-picked list. */
+  source: 'kyobo' | 'data4library' | 'curated';
+  /** Ranking period (`YYYY-MM-DD`) and the page to credit, for 교보문고. */
+  periodStart?: string;
+  periodEnd?: string;
+  sourceUrl?: string;
 }
 
 export async function fetchBestsellers(signal?: AbortSignal): Promise<BestsellerResult> {

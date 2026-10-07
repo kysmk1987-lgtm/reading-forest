@@ -1,4 +1,4 @@
-export type BookSource = 'kakao' | 'aladin' | 'naver' | 'google' | 'openlibrary' | 'manual';
+export type BookSource = 'kakao' | 'aladin' | 'naver' | 'kyobo' | 'google' | 'openlibrary' | 'manual';
 
 export interface Book {
   /**

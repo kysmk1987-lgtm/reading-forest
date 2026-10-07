@@ -53,11 +53,20 @@ npx expo start --web    # 바로 웹으로 실행 (http://localhost:8081)
 | `ALADIN_TTB_KEY` | ⛔ **종료 예정** | 상세 보강 (큰 표지, 쪽수, 분류) | 알라딘 OpenAPI는 신규 키 발급이 2026-09-04에 끝났고 서비스가 **2026-10-30 종료**됩니다. 기존 키가 있다면 그때까지만 동작하며, 없어도 앱은 정상 동작합니다 |
 | `NAVER_CLIENT_ID` / `NAVER_CLIENT_SECRET` | 선택 | 예비 검색 | [Naver Developers](https://developers.naver.com/apps) → 애플리케이션 등록 → 사용 API에서 **검색** 선택 → Client ID / Secret 복사 |
 | `NL_CERT_KEY` | 권장 | **쪽수 자동 채우기 1순위** (국립중앙도서관 ISBN 서지정보 `PAGE`) | [국립중앙도서관 Open API](https://www.nl.go.kr/NL/contents/N31101030700.do) → 회원가입·로그인 → **인증키 신청**(ISBN 서지정보) → 마이페이지에서 승인된 `cert_key` 복사 |
-| `DATA4LIBRARY_KEY` | 권장 | **베스트셀러(도서관 인기 대출)** + 쪽수 2순위 | [도서관 정보나루](https://www.data4library.kr) → 회원가입·로그인 → 마이페이지 → **인증키 신청**(이용 목적 입력, 승인 후 `authKey` 발급, 보통 1일 이내) |
+| `DATA4LIBRARY_KEY` | ✅ **등록됨** (승인 대기 중이면 호출이 실패해도 자동으로 건너뜀) | 베스트셀러 2순위(도서관 인기 대출) + 쪽수 3순위 | [도서관 정보나루](https://www.data4library.kr) → 회원가입·로그인 → 마이페이지 → **인증키 신청**(이용 목적 입력, 승인 후 `authKey` 활성화) |
+| `ENABLE_DAUM_PAGES` | 기본 켜짐 | 다음 책 페이지에서 쪽수 읽기 | 끄려면 `false` (아래 주의 참고) |
+| `ENABLE_KYOBO_BESTSELLERS` | 기본 켜짐 | 교보문고 베스트셀러 | 끄려면 `false` (아래 주의 참고) |
 
-**쪽수 자동 채우기**: 책 상세(`/api/books/{ISBN}`)는 **국립중앙도서관 서지정보(`NL_CERT_KEY`) → 도서관 정보나루 상세(`DATA4LIBRARY_KEY`, 쪽수가 들어있는 책만) → 알라딘** 순서로 쪽수를 찾아 채웁니다. 기록 시트의 **현재 진행** 줄에 "전체 N쪽"이 보이고, 쪽수를 못 찾으면 **"쪽수 정보가 없어요 · 직접 입력"** 링크와 % 입력으로 바뀝니다(키가 없어도 앱은 정상 동작).
+**쪽수 자동 채우기**: 책 상세(`/api/books/{ISBN}`)는 **다음(Daum) 책 페이지 → 국립중앙도서관 서지정보(`NL_CERT_KEY`) → 도서관 정보나루 상세(`DATA4LIBRARY_KEY`) → 알라딘** 순서로 쪽수를 찾아 채웁니다.
+- **다음 책 페이지** (`api/_lib/daum.ts`): 카카오 책 검색 결과의 `url`(예: `https://search.daum.net/search?w=bookpage&bookId=5824679`)을 열어 **페이지수**(+ 사이즈 · 출간일) 칸을 읽습니다. **책 상세를 열 때만** 한 권씩 부르고(검색 결과마다 부르지 않음), 일반 브라우저 User-Agent · 4초 제한시간, 서버 메모리 캐시(최대 500권, 30일) + 쪽수를 찾은 응답은 CDN에 **30일**(`s-maxage`) 보관합니다. 실패하면 조용히 다음 방법으로 넘어가요. 2026-10-07 기준 27권 중 26권(96%)에서 쪽수를 찾았습니다(없던 책: 『흰』).
+- 기록 시트의 **현재 진행** 줄에 "전체 N쪽"이 보이고, 쪽수를 못 찾으면 **"쪽수 정보가 없어요 · 직접 입력"** 링크와 % 입력으로 바뀝니다.
 
-**베스트셀러 추천** (`/api/books/bestsellers`, 6시간 캐시): `DATA4LIBRARY_KEY`가 있으면 최근 30일 **도서관 인기 대출** 순위를 카카오로 표지·정보를 채워서 보여주고("도서관에서 많이 빌린 책"), 없으면 `src/config/bestsellers.ts`의 **직접 고른 목록**(카카오로 ISBN 확인)을 "요즘 많이 읽는 책"으로 보여줍니다.
+**베스트셀러 추천** (`/api/books/bestsellers`, 6시간 캐시 `s-maxage` + `stale-while-revalidate`), 먼저 답하는 곳을 씁니다:
+1. **인터넷 교보문고 주간 종합 순위** (`api/_lib/kyobo.ts`): 교보문고 베스트셀러 화면이 쓰는 JSON(`store.kyobobook.co.kr/api/gw/best/best-seller/online`)에서 상위 20권(ISBN = `cmdtCode`)을 가져와 카카오로 소개·옮긴이를 보강합니다. 검색 화면에 "교보문고 베스트셀러" + 순위 배지 + **"출처: 교보문고 · 기준일"**(교보문고 베스트셀러 페이지로 연결)이 표시돼요.
+2. **도서관 정보나루 인기 대출**(최근 30일, `DATA4LIBRARY_KEY`가 활성화된 경우) → "요즘 도서관에서 많이 빌린 책"
+3. `src/config/bestsellers.ts`의 **직접 고른 목록**(카카오로 ISBN 확인) → "요즘 많이 읽는 책"
+
+> ⚠️ **주의 (스크래핑)**: 다음 책 페이지와 교보문고 JSON은 **공개 API가 아닙니다**. 각 사이트 이용약관에 어긋날 수 있고, 화면 구조가 바뀌면 예고 없이 동작하지 않을 수 있어요(그때는 자동으로 다음 방법으로 넘어가며 앱은 계속 동작). 호출을 최소화하도록 캐시를 길게 두었고, 문제가 생기거나 요청을 받으면 Vercel 환경 변수 `ENABLE_DAUM_PAGES=false` / `ENABLE_KYOBO_BESTSELLERS=false`를 넣고 재배포해서 바로 끌 수 있습니다. 파서는 `scripts/fixtures/`의 저장된 HTML/JSON으로 테스트합니다(`npm run test:scrapers`).
 
 Vercel에 등록 (`--value`로 넘기면 프롬프트 없이 등록되고 줄바꿈도 섞이지 않습니다):
 
@@ -78,8 +87,8 @@ npx vercel --prod --yes                                                         
 | 경로 | 설명 |
 | --- | --- |
 | `GET /api/books/search?q=검색어&field=keyword\|title\|author\|publisher\|isbn` | 국내 도서 검색. 응답 `{ books, source }`, 10분 캐시 |
-| `GET /api/books/{ISBN}` | 상세 정보 (카카오 + 네이버 병합, 쪽수는 국립중앙도서관 → 정보나루 → 알라딘 순서로 보강: 표지, 소개, 저자/옮긴이, 정가, 서점 링크), 1일 캐시 |
-| `GET /api/books/bestsellers` | 베스트셀러 추천 `{ books, source: 'data4library' \| 'curated' }`, 6시간 캐시 |
+| `GET /api/books/{ISBN}` | 상세 정보 (카카오 + 네이버 병합, 쪽수는 다음 책 페이지 → 국립중앙도서관 → 정보나루 → 알라딘 순서로 보강: 표지, 소개, 저자/옮긴이, 정가, 서점 링크), 1일 캐시(쪽수가 있으면 30일) |
+| `GET /api/books/bestsellers` | 베스트셀러 추천 `{ books, source: 'kyobo' \| 'data4library' \| 'curated', periodStart?, periodEnd?, sourceUrl? }`, 6시간 캐시 |
 
 오류 응답은 `{ error: { code, message } }` 형식이며 `code`는 `NO_KEYS`, `BAD_REQUEST`, `NOT_FOUND`, `RATE_LIMITED`, `UPSTREAM` 중 하나입니다. 앱은 코드별로 한국어 안내를 보여줍니다.
 
@@ -171,7 +180,8 @@ api/                        # Vercel 서버리스 함수 (도서 검색 프록�
 ├─ books/search.ts          # GET /api/books/search
 ├─ books/[isbn].ts          # GET /api/books/{ISBN}
 ├─ books/bestsellers.ts     # GET /api/books/bestsellers
-└─ _lib/                    # providers(카카오·알라딘·네이버), pages(국립중앙도서관·정보나루 쪽수/인기 대출), 병합, ISBN, 캐시
+└─ _lib/                    # providers(카카오·알라딘·네이버), daum(책 페이지 쪽수), kyobo(베스트셀러),
+                            #   pages(국립중앙도서관·정보나루 쪽수/인기 대출), 병합, ISBN, 캐시
 src/
 ├─ app/                     # Expo Router 라우트 (파일 = 화면)
 │  ├─ _layout.tsx           # 폰트·QueryClient·Auth 리스너·Stack, 웹에서는 모바일 폭(480px)으로 중앙 정렬
@@ -219,6 +229,7 @@ supabase/migrations/        # DB 스키마 + RLS (0001_init.sql …), setup.sql 
 scripts/test-sync-mapping.ts # 서재 ⇄ Supabase 행 변환 오프라인 테스트
 scripts/test-gallery-wrapped.ts # 블러 규칙 · 쪽→% · 번역 한도 · 결산 집계/페르소나 테스트 (npm test)
 scripts/test-garden-reviews.ts # 숲 칸 배치·이동·교환 · 리뷰 집계 · 쪽수 파싱/대체 테스트 (npm test)
+scripts/test-scrapers.ts    # 다음 책 페이지 · 교보문고 베스트셀러 파서 테스트 (fixtures/ 저장본 사용, npm test)
 vercel.json                 # 빌드 설정, /api 제외 SPA 리라이트, 함수 설정
 ```
 
