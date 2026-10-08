@@ -3,6 +3,7 @@ import { create } from 'zustand';
 
 import { useTogetherStore } from '@/stores/togetherStore';
 
+import type { ReaderPhase } from './leaderboard';
 import { isRegionKey, REGION_KEYS, type RegionKey } from './regions';
 
 /**
@@ -26,6 +27,11 @@ export interface PresencePayload {
   species?: string;
   book?: string;
   cover?: string;
+  /** Reading-room ranking: timer phase, start of the current focus phase (ms), today's logged minutes here, day token. */
+  phase?: ReaderPhase;
+  since?: number;
+  todayMin?: number;
+  token?: string;
 }
 
 export interface Peer extends PresencePayload {
@@ -85,6 +91,10 @@ export function peersFromPresenceState(state: Record<string, unknown[]>, selfKey
         species: typeof meta.species === 'string' ? meta.species : undefined,
         book: typeof meta.book === 'string' ? meta.book.slice(0, 40) : undefined,
         cover: typeof meta.cover === 'string' && meta.cover.startsWith('https://') ? meta.cover : undefined,
+        phase: meta.phase === 'focus' || meta.phase === 'break' || meta.phase === 'paused' ? meta.phase : undefined,
+        since: typeof meta.since === 'number' && Number.isFinite(meta.since) ? meta.since : undefined,
+        todayMin: typeof meta.todayMin === 'number' && meta.todayMin >= 0 ? Math.min(1440, Math.round(meta.todayMin)) : undefined,
+        token: typeof meta.token === 'string' ? meta.token.slice(0, 16) : undefined,
       },
     ];
   });
@@ -127,6 +137,9 @@ const DEMO_BASE: Partial<Record<RegionKey, number>> = {
 const DEMO_ROOMS = ['rainy-bookstore', 'midnight-library', 'quiet-teahouse', 'seaside-attic'];
 const DEMO_NAMES = ['도토리 독서가', '솔방울', '책벌레', '밤산책', '새벽독서', '나뭇잎', '조약돌', '라떼한잔'];
 
+/** Demo readers' focus phases started at fixed offsets from this moment, so their live minutes keep counting. */
+const DEMO_EPOCH = Date.now();
+
 export function demoPeers(tick: number): Peer[] {
   const peers: Peer[] = [];
   REGION_KEYS.forEach((region, i) => {
@@ -135,13 +148,22 @@ export function demoPeers(tick: number): Peer[] {
     const n = Math.max(0, base + wobble);
     for (let k = 0; k < n; k++) {
       const inRoom = k % 3 === 0;
+      // Hashed so phase / name / minutes don't line up with the room index (which is (i + k) % 4).
+      const seed = ((i * 100 + k) * 2654435761) >>> 16;
       peers.push({
         key: `demo-${region}-${k}`,
         self: false,
         region,
         status: inRoom ? 'room' : 'focusing',
         room: inRoom ? DEMO_ROOMS[(i + k) % DEMO_ROOMS.length] : undefined,
-        nickname: inRoom ? DEMO_NAMES[(i * 3 + k) % DEMO_NAMES.length] : undefined,
+        nickname: inRoom ? DEMO_NAMES[seed % DEMO_NAMES.length] : undefined,
+        ...(inRoom
+          ? {
+              phase: (Math.floor(seed / 8) % 4 === 0 ? 'break' : 'focus') as ReaderPhase,
+              since: Math.floor(seed / 8) % 4 === 0 ? undefined : DEMO_EPOCH - (Math.floor(seed / 32) % 22) * 60_000,
+              todayMin: Math.floor(seed / 700) % 75,
+            }
+          : null),
       });
     }
   });

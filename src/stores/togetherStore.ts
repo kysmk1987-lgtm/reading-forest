@@ -12,10 +12,13 @@ interface TogetherState {
   /** Theme room the user is currently in (not persisted). */
   roomId: string | null;
   lastCheerAt: number;
+  /** Today's anonymous reading-room token from the server (pairs my Presence with my ranking row). */
+  roomToken: { day: string; token: string } | null;
   setDetectedRegion: (region: RegionKey | null) => void;
   setRegionOverride: (region: RegionKey | null) => void;
   setRoomId: (roomId: string | null) => void;
   markCheer: (at: number) => void;
+  setRoomToken: (token: { day: string; token: string } | null) => void;
 }
 
 export const useTogetherStore = create<TogetherState>()(
@@ -25,15 +28,17 @@ export const useTogetherStore = create<TogetherState>()(
       regionOverride: null,
       roomId: null,
       lastCheerAt: 0,
+      roomToken: null,
       setDetectedRegion: (detectedRegion) => set({ detectedRegion }),
       setRegionOverride: (regionOverride) => set({ regionOverride }),
       setRoomId: (roomId) => set({ roomId }),
       markCheer: (lastCheerAt) => set({ lastCheerAt }),
+      setRoomToken: (roomToken) => set({ roomToken }),
     }),
     {
       name: 'rf-together',
       storage: persistStorage,
-      partialize: (s) => ({ detectedRegion: s.detectedRegion, regionOverride: s.regionOverride, lastCheerAt: s.lastCheerAt }),
+      partialize: (s) => ({ detectedRegion: s.detectedRegion, regionOverride: s.regionOverride, lastCheerAt: s.lastCheerAt, roomToken: s.roomToken }),
     },
   ),
 );

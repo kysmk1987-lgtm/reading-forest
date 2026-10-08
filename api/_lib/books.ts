@@ -65,12 +65,13 @@ export async function lookupBook(rawIsbn: string): Promise<ServiceResult<Book>> 
   const parts = [aladin, kakao, naver].filter((b): b is Book => !!b);
   if (!parts.length) return { ok: false, code: 'NOT_FOUND' };
   const book = mergeBooks(parts);
-  // Kakao/Naver have no page count: Daum bookpage (linked from Kakao) first, then the library APIs
-  // (국립중앙도서관 → 정보나루) when keys are set. Aladin, when present, already filled it above.
-  if (!book.pageCount && book.isbn13) {
+  // Kakao/Naver have no page count and cut the description: Daum bookpage (linked from Kakao) first for both,
+  // then the library APIs (국립중앙도서관 → 정보나루) for pages when keys are set. Aladin, when present, already filled pages.
+  if (book.isbn13) {
     const daum = await safe('daum-pages', () => daumBookFacts(book.isbn13!, kakao?.link));
-    if (daum?.pageCount) book.pageCount = daum.pageCount;
+    if (!book.pageCount && daum?.pageCount) book.pageCount = daum.pageCount;
     if (!book.publishedDate && daum?.publishedDate) book.publishedDate = daum.publishedDate;
+    book.description = longer(book.description, daum?.description);
   }
   if (!book.pageCount && book.isbn13) {
     const pages = await safe('library-pages', () => libraryPageCount(book.isbn13!));

@@ -3,6 +3,9 @@
 //   grow.wav  — rising chime when a tree reaches a new stage
 //   water.wav — bubbly droplet for watering a friend's forest
 //   dig.wav   — shovel crunch when a tree is transplanted
+//   soon.wav     — soft double blip 5 seconds before a timer phase ends
+//   to-break.wav — gentle falling bell when focus ends and the break starts
+//   to-focus.wav — bright rising bell when the break ends and focus starts again
 // Run: node scripts/generate-tap-sound.mjs
 import { mkdirSync, writeFileSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
@@ -95,6 +98,14 @@ const sounds = {
     { at: 0.2, samples: crunch(0.1, 0.22, 6, 11) },
     { at: 0.3, samples: tone(0.08, 700, 1100, 0.18, 6) },
   ]),
+  'soon.wav': mix([
+    { at: 0, samples: tone(0.16, 1318.5, 1318.5, 0.16, 7) },
+    { at: 0.22, samples: tone(0.16, 1318.5, 1318.5, 0.16, 7) },
+  ]),
+  // E6 – C6 – G5: settling down for a break.
+  'to-break.wav': mix([1318.5, 1046.5, 784].map((f, i) => ({ at: i * 0.22, samples: tone(1.1, f, f, 0.2, 3.5) }))),
+  // G5 – C6 – E6 – G6: back to reading.
+  'to-focus.wav': mix([784, 1046.5, 1318.5, 1568].map((f, i) => ({ at: i * 0.12, samples: tone(0.7, f, f, 0.2, 4.5) }))),
 };
 
 mkdirSync(outDir, { recursive: true });

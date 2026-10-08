@@ -1,7 +1,7 @@
 # 독서의숲 인수인계 문서 (HANDOFF)
 
 > **다음 AI 에이전트 / 사람에게**: 작업을 시작하기 전에 이 문서를 끝까지 읽어주세요. 결정된 사항을 다시 묻거나 뒤집지 말고, 바꿔야 할 이유가 있으면 사용자에게 먼저 확인하세요.
-> 마지막 갱신: 2026-10-07 (6차 + 다음 쪽수 · 교보문고 베스트셀러 + 탭 사운드 지연 개선 · 갤러리 탭바 유지 + 8차: 숲 친구 여러 개 · 땅 넓히기 무제한/끌어서 둘러보기 · 캐릭터 4종까지 + 9차: 땅 좁히기 · 숲 확대/축소 + 독서의숲 베스트셀러 이름 · 보조 화면 탭바 유지 · 캘린더 시작/찜 표시 + 로그인 화면 먼저(로그인 게이트 · 이메일 가입) + 10차: 땅 최대 20×20 · 카드/결산 화면도 탭바 · 키보드가 열리면 탭바 숨김 + 로그인 보강: 중복 가입 안내 · 다른 기기 동기화 보강 · 한국어 인증/재설정 메일 템플릿 · 메일 재전송 타이머 · 동그란 카카오/구글 버튼)
+> 마지막 갱신: 2026-10-08 (함께 읽기 재구성: 독서 타이머(반복 · 5초 전 알림 · 소리 자동 재생 · 잠금화면 타이머) + 독서실 순위 · 책 상세 '이 책 읽기 시작') · 2026-10-08 (책 소개 전체(다음 책소개) + 더보기 · 캘린더 찜 표시 삭제) · 2026-10-07 (6차 + 다음 쪽수 · 교보문고 베스트셀러 + 탭 사운드 지연 개선 · 갤러리 탭바 유지 + 8차: 숲 친구 여러 개 · 땅 넓히기 무제한/끌어서 둘러보기 · 캐릭터 4종까지 + 9차: 땅 좁히기 · 숲 확대/축소 + 독서의숲 베스트셀러 이름 · 보조 화면 탭바 유지 · 캘린더 시작/찜 표시 + 로그인 화면 먼저(로그인 게이트 · 이메일 가입) + 10차: 땅 최대 20×20 · 카드/결산 화면도 탭바 · 키보드가 열리면 탭바 숨김 + 로그인 보강: 중복 가입 안내 · 다른 기기 동기화 보강 · 한국어 인증/재설정 메일 템플릿 · 메일 재전송 타이머 · 동그란 카카오/구글 버튼)
 
 ## 1. 프로젝트 한 줄 요약
 책을 읽을수록 나만의 **아이소메트릭 숲**에 나무가 자라는 **독서 기록 앱**. 파스텔 자연 톤, 말랑한 입체 버튼, 가벼운 효과음. 현재는 **한국 출시 버전**(한국어 UI · 국내 도서)이고, 웹(Vercel)으로 먼저 운영 중이며 앱(iOS/Android)은 같은 코드(Expo)로 나중에 출시합니다.
@@ -25,13 +25,14 @@
 ## 3. 폴더 구조 (요약)
 ```
 api/            Vercel 함수: books/search · books/[isbn] · books/bestsellers · geo
-  _lib/         providers(카카오·알라딘·네이버) · daum(쪽수 스크래핑) · kyobo(베스트셀러) · pages(국립중앙도서관·정보나루)
+  _lib/         providers(카카오·알라딘·네이버) · daum(쪽수 · 책소개 스크래핑) · kyobo(베스트셀러) · pages(국립중앙도서관·정보나루)
 src/app/        화면(라우트): (tabs)/ 숲·서재·기록·함께 읽기·마이 + 숨김 탭 gallery, book/[id], search, trees, card/, wrapped, forest/[userId], room/[id]
 src/features/   기능별 코드: forest · library · records · together · sound · gallery · wrapped · reviews · books · auth
 src/components/ 디자인 시스템(ui/) · 탭바 · 표지 등
 src/stores/     Zustand 스토어 (library, settings, forest, profile, entitlements, bookCache, timer …)
 src/config/     locale.ts(언어·지역) · app.ts(API 주소) · bestsellers.ts(직접 고른 목록)
-supabase/       migrations/0001~0006 + setup*.sql(붙여넣기용, npm run build:sql로 생성) + templates/(한국어 인증 · 재설정 메일)
+modules/        로컬 Expo 네이티브 모듈 (rf-ongoing-timer: Android 잠금화면 카운트다운 알림, 자동 링크)
+supabase/       migrations/0001~0007 + setup*.sql(붙여넣기용, npm run build:sql로 생성) + templates/(한국어 인증 · 재설정 메일)
 scripts/        테스트 · 생성 스크립트 · setup-new-pc.ps1 · e2e/(헤드리스 브라우저 점검)
 docs/           HANDOFF.md(이 문서) · screenshots/
 ```
@@ -45,6 +46,12 @@ docs/           HANDOFF.md(이 문서) · screenshots/
    - 화면 표시는 공급원과 상관없이 **"독서의숲 베스트셀러"**(검색 화면). 부제(예: "인터넷 교보문고 이번 주 종합 순위") · "출처: 교보문고" 문구는 2026-10-07 사용자 요청으로 **표시하지 않음**. 데이터 공급원은 그대로.
 5. **알라딘 OpenAPI는 2026-10-30 종료** → 의존하지 않음(키가 있으면 보조로만).
 6. **함께 읽기 지도는 한국 지도**(17개 시·도). 세계 지도/3D 지구본은 `EXPO_PUBLIC_MAP_SCOPE=GLOBAL` 자리만 있음.
+   - **함께 읽기 탭 구성(2026-10-08 재구성)**: 상단 세그먼트는 **⏱️ 타이머 · 🏠 독서실** 두 개. 예전 '소리' · '지도' 탭은 없앰 — 소리는 타이머 안의 **소리 카드 → 소리 설정 시트**(`src/features/sound/SoundSheet.tsx`, 믹서 + '타이머와 함께 재생' · '휴식 때도 소리 재생' 스위치)로, **지도는 독서실 목록 맨 아래 접힌 '🗺️ 전국 독서 지도' 카드**로 옮김(보조 기능으로 낮춤).
+   - **독서 타이머**(`src/features/together/timerEngine.ts` 순수 엔진 + `src/stores/timerStore.ts` persist `rf-timer` v1): 집중/휴식 선택 버튼 없음. 프리셋(25·5 / 50·10 / 15·3) 또는 직접 설정 → **집중 1회 + 휴식 1회 후 자동 종료**, '🔁 반복'을 켜면 최대 12회 반복(`REPEAT_CYCLES`). 시간은 **시작 시각(anchor) 기준으로 계산**(틱 수가 아님) → 앱을 껐다 켜도 이어지고, 백그라운드에서 지나간 집중 구간도 모두 기록, 지나간 알림 소리는 다시 울리지 않음(`audibleEvents`, 3초 넘게 지난 이벤트는 무음). 일시정지 · 계속 · '처음으로'(그때까지 집중한 분은 기록). 단계 끝 **5초 전 배너 + 작은 소리/진동**, 단계가 바뀔 때 다른 소리(`soon` · `to-break` · `to-focus` WAV, UI 소리 설정과 상관없이 울림). **집중 시간만** 연결한 책 기록 · 캘린더(`addFocusLog`)에 남고 휴식은 안 남음. 매초 상태를 저장하지 않고 이벤트가 있을 때만 저장.
+   - **소리**: '시작'을 누르는 순간 고른 소리가 재생(웹 자동재생 규칙도 이 탭으로 해결). 휴식 중에는 기본으로 멈춤(설정으로 계속 재생 가능). 사용자가 직접 끈 소리는 그 타이머 동안 다시 켜지 않음(`mixerStore.owner`).
+   - **잠금화면 · 알림**: Android는 로컬 네이티브 모듈 `modules/rf-ongoing-timer`(NotificationCompat 크로노미터 카운트다운, 계속 표시 · 무음)로 남은 시간을 보여주고 단계마다 갱신, 단계 끝 알림은 expo-notifications로 예약. 네이티브 모듈이 없는 빌드(Expo Go · 예전 빌드)에서는 expo-notifications의 고정 알림으로 대신함(시계가 움직이지 않음). **정확한 알람 권한(SCHEDULE_EXACT_ALARM)은 Play 정책 때문에 요청하지 않음** → 절전(Doze) 중에는 알림이 몇 분 늦을 수 있음. 웹은 탭 제목에 카운트다운('📖 12:34 집중 · 독서의숲') + 탭이 숨겨져 있을 때 Notification API. **iOS Live Activities는 범위 밖**(iOS는 예약 알림만).
+   - **독서실 경쟁**: 방마다 '지금 읽는 사람 · 오늘 이 방에서 읽은 분 · 순위 · 내 순위(1등과의 차이)'. 방 화면을 열어 둔 동안 타이머 집중 시간이 그 방 기록으로 들어감(휴식 제외). 서버 집계는 마이그레이션 0007(`add_room_minutes` · `room_leaderboard` · `room_today_summary`, 하루 = 한국 날짜). **0007 적용 전에는 Realtime Presence만으로 순위**(지금 방에 있는 사람만, 나가면 빠짐) — 앱이 RPC 없음(PGRST202/42883)을 감지해 조용히 전환. 다른 사람에게는 닉네임과 하루짜리 익명 토큰만 보임(user_id 노출 없음).
+   - **책 상세 '이 책 읽기 시작'**(`src/features/library/StartReadingButton.tsx`): 서재에 없으면 '읽고 있는 책'으로 담고, '읽고 싶은 책' · '중단'이면 '읽고 있는 책'으로 바꾼 뒤(완독한 책은 그대로) `router.dismissTo('/together')` → 타이머에 그 책이 선택되고 '시작' 버튼이 반짝임(`timerStore.readingIntent`, 60초 유효).
 7. **OCR(사진 글자 인식) 제거** — tesseract.js 삭제. 다시 넣지 않음. (`expo-image-picker`는 2026-10-07 **문구 카드 '사진' 배경(프리미엄)** 용도로만 다시 설치 — OCR과 무관)
 8. **번역 기능은 꺼짐** (`EXPO_PUBLIC_TRANSLATION_ENABLED` 플래그 + 스텁만 있음, 외부 번역 API 호출 없음).
 9. **독서 DNA 결산 요약 카드 내보내기는 프리미엄 전용** (`entitlements` 게이팅 그대로).
@@ -61,7 +68,8 @@ docs/           HANDOFF.md(이 문서) · screenshots/
    - **보조 화면도 탭바 · 광고 유지**(2026-10-07): `search`, `book/[id]`, `trees`, `room/[id]`, `forest/[slug]`, `card/new`, `card/[id]`, `wrapped`(10차에 추가)는 루트 Stack에 그대로 두고(주소 · `router.push` 경로 그대로, 책 → 책처럼 쌓이는 뒤로 가기 유지) `Screen`의 `footer={<StackTabBar />}`로 같은 탭바 + 광고 자리를 그림(`src/components/ForestTabBar.tsx`). 들어온 탭이 강조되고(루트 내비게이션 상태에서 아래에 깔린 `(tabs)`의 탭을 찾음, 주소로 바로 들어오면 강조 없음), 탭을 누르면 `router.dismissTo('/library')`처럼 **기존 탭 그룹으로 돌아감**(없으면 교체). 숨김 탭으로 옮기지 않은 이유: 동적 경로(`book/[id]`)를 탭으로 두면 책 → 다른 책이 쌓이지 않고 같은 화면의 파라미터만 바뀜. `wrapped`(결산 이야기 화면)는 `Screen`을 안 써서 화면 아래에 `StackTabBar`를 직접 붙이고, 이야기 영역 높이는 `onLayout`으로 잼(요약 카드 크기 계산). **탭바 없는 화면은 로그인 쪽만**: `(auth)`의 `/login` · `/signup` · `/forgot-password`, `auth/callback`, `auth/reset` — 탭은 `Stack.Protected`로 막혀 있어 로그인 전에는 눌러도 갈 곳이 없으므로 일부러 뺌.
    - **키보드가 열리면 탭바 + 광고 자리를 숨김**(10차, `TabBarView` 안에서 `src/lib/useKeyboardVisible.ts` 사용 → 탭 화면 · 보조 화면 모두 적용): 앱은 `Keyboard` 이벤트(iOS는 will, Android는 did), 웹은 visualViewport 높이 차이(150px 넘게) 또는 **터치 화면에서 입력칸에 포커스**가 있을 때. 데스크톱 웹은 포커스만으로는 숨기지 않음. `Screen`의 ScrollView에 `automaticallyAdjustKeyboardInsets`(iOS)도 켬. Android는 edge-to-edge라 키보드 위로 내용이 자동으로 올라가지 않을 수 있음(기존과 같음, 필요하면 react-native-keyboard-controller 검토).
    - 참고: expo-router 57의 Stack은 `NAVIGATE`가 현재 화면과 이름이 같을 때만 기존 화면을 재사용하고, 아니면 새로 push함(`node_modules/expo-router/build/layouts/StackClient.js`). 루트 Stack 화면에서 탭 화면(숨김 탭 포함)으로 **돌아갈 때는 `router.dismissTo`**(아래에 탭 그룹이 있으면 거기까지 닫고 해당 탭으로, 없으면 현재 화면을 교체). `card/[id]` · `card/new`의 갤러리 이동은 모두 `dismissTo`로 바꿈.
-   - **기록 캘린더 표시**(2026-10-07): '전체 보기'는 읽기 시작(📖, `startDate`, 없으면 `add` 로그 날짜) · 읽고 싶은 책(💗, `want` 책의 `createdAt` 날짜) · 완독(🏁, `endDate`, 없으면 `complete` 로그 날짜)을 날짜 칸 아래 작은 표시 + 범례로 보여주고, '완독 보기'는 완독만. 아래 날짜 목록도 같은 기준(`src/features/records/aggregate.ts`의 `activitiesByDay` · `markersOf`, 테스트는 `npm run test:gallery`).
+   - **기록 캘린더 표시**(2026-10-07, 10-08 수정): '전체 보기'는 읽기 시작(📖, `startDate`, 없으면 `add` 로그 날짜) · 완독(🏁, `endDate`, 없으면 `complete` 로그 날짜)을 날짜 칸 아래 작은 표시 + 범례로 보여주고, '완독 보기'는 완독만. 아래 날짜 목록 · '기록한 날 N일'도 같은 기준(`src/features/records/aggregate.ts`의 `activitiesByDay` · `markersOf`, 테스트는 `npm run test:gallery`). **읽고 싶은 책(💗) 표시는 2026-10-08 사용자 요청으로 삭제** — 찜한 책(`want`)은 캘린더에 나오지 않고 기록한 날에도 세지 않음.
+   - **책 소개 전체 + 더보기**(2026-10-08): 카카오 `contents`는 약 200~250자에서 잘려 오므로 `/api/books/[isbn]`이 쪽수용으로 이미 읽던 **다음 책 페이지의 '책소개'(출처 인터넷 교보문고)**도 읽어 더 긴 쪽을 씀(`api/_lib/daum.ts`의 `parseDaumIntro`, 문단은 빈 줄로 구분, `ENABLE_DAUM_PAGES=false`면 같이 꺼짐). 그래서 이제 쪽수가 있는 책도 다음 페이지를 한 번 읽음(30일 캐시). 서재에 담긴 책은 더 긴 소개가 오면 저장된 책 정보도 갱신(`useBook`). 화면은 `src/features/books/BookDescription.tsx` — 6줄로 접고 넘칠 때만 오른쪽 아래 '더보기'/'접기'(웹에는 `onTextLayout`이 없어서 숨긴 전체 글 높이와 비교), 문장 부호 없이 끝나면 '…'를 붙임. 다음 페이지에 소개가 없거나 배포 전이면 예전처럼 카카오 소개.
 12. 비밀 값은 절대 커밋하지 않음 (카카오 키, `.env.local`, service_role 키, DB 비밀번호). 커밋 전 `git diff --cached`를 키 패턴으로 검사.
 13. **로그인 화면 먼저(ERP식 로그인 게이트, 2026-10-07)** — 앱을 열면 로그인부터. 예전의 "익명 계정 자동 생성 + 마이의 '로그인하고 기록 지키기' 카드"는 없앰.
    - 로그인 방법: **카카오 · 구글(Supabase OAuth) · 이메일+비밀번호**. 화면은 `src/app/(auth)/`(`/login` · `/signup` · `/forgot-password`) + 게이트 밖 `src/app/auth/callback.tsx`(OAuth · 가입 인증 메일) · `src/app/auth/reset.tsx`(비밀번호 재설정 메일 → 새 비밀번호). 공유 숲 `/forest/[slug]`도 로그인 없이 열림(방문자 물 주기는 기존처럼 익명 세션).
@@ -81,7 +89,7 @@ docs/           HANDOFF.md(이 문서) · screenshots/
      - 서버에 있음 · 내려옴: 서재 · 독서 로그 · 별점/한줄평/기대지수 · 나무 종류/위치(`user_books` · `reading_logs`), 닉네임(`profiles.nickname`), 숲 이름 · 캐릭터(`profiles`, 0005 필요 → 아래 metadata로도 따라감), 공개 숲 링크(`forests.share_slug` → `forestStore.publishedSlug`), 갤러리에 올린 카드(`quote_cards` → `cardsStore.made`, 결산 '만든 카드' 수).
      - **새로 동기화**(마이그레이션 불필요): 숲 꾸미기(날씨 · 숲 친구 · 땅 넓히기 `gardenExtra`) · 설정(효과음 · 갤러리 블러 · 한줄평 공개 범위) · 숲 이름/캐릭터 사본을 **Supabase Auth `user_metadata.rf_prefs`**에 저장(`auth.updateUser({ data })`, 1.5초 모아 쓰기). 로그인 때 `getUser()`로 읽어 **더 최근 쪽 우선**(`src/features/library/accountPrefs.ts`, 이 기기의 마지막 변경 시각은 `rf-sync-meta`). 새 기기 · 계정이 바뀐 기기는 시각 0이라 계정 값이 내려옴. 계정이 바뀌면 이전 계정의 숲 꾸미기 · 공개 숲 링크도 기본값으로 되돌림.
      - **지운 책 전파**: 서버가 확인한 책 id 목록(`rf-sync-meta.knownEntryIds`)에 있는데 서버에서 사라진 책 = 다른 기기에서 지움 → 이 기기에서도 지움(예전에는 다시 올려서 되살아났음). 오프라인에서 지운 책은 `pendingDeletes`로 다음 동기화 때 서버에서 지우고 되살리지 않음(`reconcileDeletes`).
-     - **기기에만 있음(의도)**: 아이디 저장 · 자동 로그인(`rf-auth-prefs`), 집중 타이머(`rf-timer`), 백색소음 믹서(`rf-mixer`), 함께 읽기 지역 등(`rf-together`), 데모/로컬 물 주기 횟수, 언어(한국어만), 갤러리에 올리지 않고 저장/공유만 한 카드 기록(서버에 없음).
+     - **기기에만 있음(의도)**: 아이디 저장 · 자동 로그인(`rf-auth-prefs`), 독서 타이머 · 오늘 집중 기록(`rf-timer`), 백색소음 믹서 + '타이머와 함께 재생' · '휴식 때도 소리 재생'(`rf-mixer`), 함께 읽기 지역 · 오늘의 독서실 토큰 등(`rf-together`), 데모/로컬 물 주기 횟수, 언어(한국어만), 갤러리에 올리지 않고 저장/공유만 한 카드 기록(서버에 없음).
      - 헤드리스 확인(가짜 Supabase): 기기 A에서 가입 · 데이터 → 새 브라우저 프로필(기기 B)에서 로그인 → 서재 · 로그 · 날씨/숲 친구/땅 · 설정 · 닉네임/숲 이름/캐릭터 · 공개 숲 링크 · 갤러리 카드 모두 내려옴, A에서 지운 책은 B에서도 사라지고 다시 올라가지 않음.
 
 ## 5. 배포 (Vercel)
@@ -113,12 +121,14 @@ docs/           HANDOFF.md(이 문서) · screenshots/
   | `0004_garden_reviews.sql` | 나무 위치(`garden_x/y`) · 책 리뷰 · 신고 | ✅ (2026-10-07 확인) |
   | `0005_profile_forest_avatar.sql` | 프로필 숲 이름(`profiles.forest_name`) · 캐릭터(`profiles.avatar`) | ❌ **미적용** — `supabase/setup_0005.sql`을 SQL Editor에서 실행 (적용 전에는 앱이 이 기기에만 저장하고 서버 동기화는 조용히 건너뜀). 캐릭터 id는 정규식 check라 새 캐릭터를 추가해도 수정 불필요 |
   | `0006_garden_unlimited.sql` | 땅 넓히기용: `user_books.garden_x/y` check를 0~11 → **0~999**로 넓힘 (10차에 앱은 최대 20×20으로 바뀌었지만, 예전에 20칸 밖에 심은 나무 위치도 동기화되도록 0~999 그대로 둠) | ❌ **미적용** — `supabase/setup_0006.sql` 실행 (0005 다음). 적용 전에는 12칸을 넘는 나무 위치만 빼고 동기화(23514 오류 시 자동 재시도) — 그 위치는 이 기기에만 남음 |
-- 새 마이그레이션은 `0007_…sql`로 추가 → `npm run build:sql`로 `setup_0007.sql` 생성 → 사용자가 SQL Editor에 붙여넣어 실행(에이전트는 DB 비밀번호를 묻지 않음). 적용된 파일은 고치지 말고 새 번호로 추가.
+  | `0007_room_leaderboard.sql` | 독서실 순위: `room_daily_minutes`(사용자 · 방 · 한국 날짜별 분, 직접 쓰기 금지) + RPC `add_room_minutes`(한 번에 최대 180분, 마지막 기록 이후 지난 시간 + 1분까지만) · `room_leaderboard` · `room_today_summary` · `room_player_token` | ❌ **미적용** — `supabase/setup_0007.sql` 실행 (0006 다음). 적용 전에는 독서실 순위가 '지금 방에 있는 사람'만으로 계산됨 |
+- 새 마이그레이션은 `0008_…sql`로 추가 → `npm run build:sql`로 `setup_0008.sql` 생성 → 사용자가 SQL Editor에 붙여넣어 실행(에이전트는 DB 비밀번호를 묻지 않음). 적용된 파일은 고치지 말고 새 번호로 추가.
 - 로컬 테스트는 `scripts/e2e/mock-sb.mjs`(PGlite로 실제 마이그레이션 실행)를 사용. 이메일 가입 · 비밀번호 로그인 · `/auth/v1/settings`(카카오 · 구글 꺼짐) · 재설정 메일도 흉내 냄(`MOCK_CONFIRM_EMAIL=1`이면 인증 메일 필요 모드).
-- 로그인 게이트(이메일 가입)는 **DB 변경 없음**(0007 없음) — 닉네임 · 동의 기록은 `auth.users.raw_user_meta_data`.
+- 로그인 게이트(이메일 가입)는 **DB 변경 없음**(관련 마이그레이션 없음) — 닉네임 · 동의 기록은 `auth.users.raw_user_meta_data`.
 
 ## 7. 남은 일 (우선순위 순)
-0. **마이그레이션 0005 · 0006 적용** — `supabase/setup_0005.sql` → `supabase/setup_0006.sql` 순서로 Supabase SQL Editor에 붙여넣고 Run (숲 이름 · 캐릭터 동기화, 12칸 넘는 나무 위치 동기화).
+0. **마이그레이션 0005 · 0006 · 0007 적용** — `supabase/setup_0005.sql` → `setup_0006.sql` → `setup_0007.sql` 순서로 Supabase SQL Editor에 붙여넣고 Run (숲 이름 · 캐릭터 동기화, 12칸 넘는 나무 위치 동기화, 독서실 오늘의 순위).
+0-1. **새 네이티브 빌드 필요(Android)** — 잠금화면 카운트다운은 로컬 모듈 `modules/rf-ongoing-timer`(자동 링크) + `app.json`의 `expo-notifications` 플러그인(알림 아이콘 · 색) 때문에 `eas build`(또는 `npx expo run:android`)로 새로 빌드해야 함. 그 전 빌드/Expo Go에서는 고정 알림으로 대신 동작.
 1. **도서관 정보나루 키 승인 대기** — 승인되면 코드 변경 없이 자동 사용(베스트셀러 2순위, 쪽수 보조). 확인: 정보나루 마이페이지의 상태가 '승인'인지.
 2. **로그인 설정 (Supabase 대시보드, README "로그인 설정" 참고)** — 로그인 화면이 먼저 나오므로 최소한 이메일은 꼭 확인:
    - **Email 공급자 켜짐** 확인(Authentication → Sign In / Providers → Email). **Confirm email** 켤지 결정(앱은 둘 다 처리). 기본 메일 발송은 시간당 몇 통 제한 → 운영 전 **SMTP 설정** 권장. (권장) 최소 비밀번호 길이 8 · 영문+숫자.
@@ -145,7 +155,7 @@ docs/           HANDOFF.md(이 문서) · screenshots/
 npx expo start --web          # 개발 서버 (http://localhost:8081, /api는 배포 사이트를 호출)
 npx expo lint                 # 린트 (경고 2개는 기존 것)
 npx tsc --noEmit              # 타입 검사
-npm test                      # 오프라인 테스트 6종 (도서 API · 동기화 · 갤러리/결산 · 숲/리뷰/쪽수 · 스크래퍼 파서 · 로그인 입력 검사/오류 분류)
+npm test                      # 오프라인 테스트 7종 (도서 API · 동기화 · 갤러리/결산 · 숲/리뷰/쪽수 · 스크래퍼 파서 · 로그인 입력 검사/오류 분류 · 타이머 엔진/독서실 순위)
 npx expo export -p web        # 웹 빌드 확인
 git push origin main          # → Vercel 자동 배포
 node scripts/e2e/e2e-live-s6c.mjs   # 배포 사이트 헤드리스 점검 (Edge 필요)

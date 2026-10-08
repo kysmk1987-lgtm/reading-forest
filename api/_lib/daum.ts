@@ -1,10 +1,11 @@
 /**
- * Page counts from the Daum book page that Kakao's book search links to (`documents[].url`,
+ * Page counts and the full 책소개 from the Daum book page that Kakao's book search links to (`documents[].url`,
  * e.g. https://search.daum.net/search?w=bookpage&bookId=5824679&q=…). This is HTML scraping, not an API:
  * it is used only for single-book detail lookups, cached for a long time, and can be switched off with
  * `ENABLE_DAUM_PAGES=false` if the markup changes or Daum objects.
  */
 import { parsePageCount } from './pages';
+import { cleanText } from './text';
 
 const TIMEOUT_MS = 4000;
 const CACHE_TTL_MS = 30 * 86400_000;
@@ -19,6 +20,8 @@ export interface DaumBookFacts {
   size?: string;
   /** `2021-09-09` */
   publishedDate?: string;
+  /** Full 책소개 (Kakao's `contents` is cut at ~200 characters); paragraphs separated by a blank line. */
+  description?: string;
 }
 
 const decode = (s: string) =>
@@ -46,7 +49,22 @@ export function parseDaumBookPage(html: string): DaumBookFacts {
   if (size) facts.size = size[1].replace(/\s/g, '');
   const date = /(\d{4})\.\s?(\d{1,2})\.\s?(\d{1,2})/.exec(rows.get('출판') ?? rows.get('출간일') ?? rows.get('발행일') ?? '');
   if (date) facts.publishedDate = `${date[1]}-${date[2].padStart(2, '0')}-${date[3].padStart(2, '0')}`;
+  const description = parseDaumIntro(html);
+  if (description) facts.description = description;
   return facts;
+}
+
+/** The `<h3 class="tit">책소개</h3> … <p class="desc">…</p>` section; long ones hide the rest in `.hide_desc`. */
+export function parseDaumIntro(html: string): string | undefined {
+  const m = /<h3[^>]*>\s*책\s*소개\s*<\/h3>\s*<\/div>\s*<p[^>]*class="desc"[^>]*>([\s\S]{1,20000}?)<\/p>/.exec(html);
+  if (!m) return undefined;
+  const text = cleanText(m[1].replace(/<span[^>]*class="ellipsis"[^>]*>[\s\S]*?<\/span>/g, ''));
+  if (!text) return undefined;
+  const paragraphs = text
+    .split(/\n\s*\n/)
+    .map((p) => p.replace(/\s*\n\s*/g, '\n').trim())
+    .filter(Boolean);
+  return paragraphs.length ? paragraphs.join('\n\n') : undefined;
 }
 
 /** Only Daum bookpage URLs are fetched (never arbitrary URLs from upstream data). */

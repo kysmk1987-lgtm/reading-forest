@@ -8,9 +8,11 @@ import { BookCover } from '@/components/BookCover';
 import { StackTabBar } from '@/components/ForestTabBar';
 import { GrowthBadge } from '@/components/GrowthBadge';
 import { AppText, Button, Card, EmptyState, IconButton, ProgressBar, Screen } from '@/components/ui';
+import { BookDescription } from '@/features/books/BookDescription';
 import { useBook } from '@/features/books/hooks';
 import { progressPercent } from '@/features/library/growth';
 import { RecordSheet } from '@/features/library/RecordSheet';
+import { StartReadingButton } from '@/features/library/StartReadingButton';
 import { STATUS_META } from '@/features/library/statusMeta';
 import { ReviewsPanel, useBookReviews } from '@/features/reviews/ReviewsPanel';
 import { formatDisplayDate } from '@/lib/date';
@@ -82,9 +84,13 @@ export default function BookDetailScreen() {
           </View>
           {entry.status === 'reading' ? <ProgressBar percent={percent} color={meta.shadow} /> : null}
           <Button label={t('book.editRecord')} variant="soft" fullWidth onPress={() => setSheetOpen(true)} />
+          <StartReadingButton book={book} entry={entry} primary={entry.status === 'reading'} />
         </Card>
       ) : (
-        <Button label={`🌱 ${t('book.addToLibrary')}`} size="lg" fullWidth onPress={() => setSheetOpen(true)} />
+        <View style={styles.addActions}>
+          <Button label={`🌱 ${t('book.addToLibrary')}`} size="lg" fullWidth onPress={() => setSheetOpen(true)} />
+          <StartReadingButton book={book} />
+        </View>
       )}
 
       <View style={styles.tabs} accessibilityRole="tablist">
@@ -116,9 +122,7 @@ export default function BookDetailScreen() {
           <Card style={styles.section}>
             <AppText variant="subtitle">{t('book.intro')}</AppText>
             {book.description ? (
-              <AppText variant="caption" muted style={styles.description}>
-                {book.description}
-              </AppText>
+              <BookDescription text={book.description} />
             ) : isEnriching ? (
               <ActivityIndicator color={colors.primaryDeep} />
             ) : (
@@ -163,6 +167,7 @@ const styles = StyleSheet.create({
   loading: { marginTop: spacing.xxl },
   hero: { alignItems: 'center', gap: spacing.sm },
   statusCard: { gap: spacing.md },
+  addActions: { gap: spacing.sm },
   statusRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
   section: { gap: spacing.sm },
   tabs: {
@@ -177,7 +182,6 @@ const styles = StyleSheet.create({
   tab: { flex: 1, alignItems: 'center', paddingVertical: spacing.sm, borderRadius: radius.pill },
   tabActive: { backgroundColor: colors.surface, borderWidth: 2, borderColor: palette.leaf, paddingVertical: spacing.sm - 2 },
   tabTextActive: { fontWeight: '700' },
-  description: { lineHeight: 22 },
   infoRow: { flexDirection: 'row', gap: spacing.md },
   infoLabel: { width: 56 },
   flex: { flex: 1 },

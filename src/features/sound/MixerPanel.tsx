@@ -18,8 +18,16 @@ export function MixerPanel() {
   const setVolume = useMixerStore((s) => s.setVolume);
   const play = useMixerStore((s) => s.play);
   const stop = useMixerStore((s) => s.stop);
+  const owner = useMixerStore((s) => s.owner);
+  const setOwner = useMixerStore((s) => s.setOwner);
   const mix = roomMix ?? volumes;
   const anyOn = Object.values(mix).some((v) => (v ?? 0) > 0);
+  const stopSound = () => {
+    const timerOwned = owner === 'timer';
+    stop();
+    // Stopped by hand during a timer run: the timer leaves it off until the next 시작.
+    if (timerOwned) setOwner('muted');
+  };
 
   return (
     <View style={styles.root}>
@@ -36,8 +44,8 @@ export function MixerPanel() {
           label={playing ? `⏹ ${t('together.mixer.stop')}` : `▶ ${t('together.mixer.play')}`}
           disabled={!playing && !anyOn}
           onPress={async () => {
-            if (playing) stop();
-            else if (!(await play())) showToast(t('together.mixer.blocked'));
+            if (playing) stopSound();
+            else if (!(await play(owner === 'muted' ? 'timer' : 'user'))) showToast(t('together.mixer.blocked'));
           }}
         />
       </Card>

@@ -12,13 +12,12 @@ import { tapFeedback } from '@/lib/feedback';
 import { useLibraryStore } from '@/stores/libraryStore';
 import { colors, palette, radius, spacing } from '@/theme';
 
-import { activitiesByDay, daysInMonth, MARKER_KINDS, markersOf, type CalendarKind, type DayActivity } from './aggregate';
+import { activitiesByDay, daysInMonth, MARKER_KINDS, markersOf, type DayActivity, type MarkerKind } from './aggregate';
 
 type Filter = 'all' | 'complete';
 const WEEKDAYS = ['sun', 'mon', 'tue', 'wed', 'thu', 'fri', 'sat'] as const;
-const MARKER_EMOJI: Partial<Record<CalendarKind, string>> = {
+const MARKER_EMOJI: Record<MarkerKind, string> = {
   add: STATUS_META.reading.emoji,
-  want: STATUS_META.want.emoji,
   complete: STATUS_META.read.emoji,
 };
 

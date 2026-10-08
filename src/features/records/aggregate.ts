@@ -1,28 +1,25 @@
-import { toISODate } from '@/lib/date';
 import type { LibraryEntry, ReadingLog, ReadingLogKind } from '@/types';
-
-/** Reading log kinds plus `want`: the day a book was put on the wishlist (읽고 싶은 책). */
-export type CalendarKind = ReadingLogKind | 'want';
 
 export interface DayActivity {
   entry: LibraryEntry;
   /** The most notable kind for this book on this day. */
-  kind: CalendarKind;
+  kind: ReadingLogKind;
   /** Every kind for this book on this day, most notable first. */
-  kinds: CalendarKind[];
+  kinds: ReadingLogKind[];
   pages: number;
 }
 
-const KIND_PRIORITY: Record<CalendarKind, number> = { focus: 0, progress: 1, want: 2, add: 3, complete: 4 };
-const byPriority = (a: CalendarKind, b: CalendarKind) => KIND_PRIORITY[b] - KIND_PRIORITY[a];
+const KIND_PRIORITY: Record<ReadingLogKind, number> = { focus: 0, progress: 1, add: 2, complete: 3 };
+const byPriority = (a: ReadingLogKind, b: ReadingLogKind) => KIND_PRIORITY[b] - KIND_PRIORITY[a];
 
-/** Kinds shown as small markers on calendar days (읽기 시작 · 읽고 싶은 책 · 완독). */
-export const MARKER_KINDS = ['add', 'want', 'complete'] as const satisfies readonly CalendarKind[];
+/** Kinds shown as small markers on calendar days (읽기 시작 · 완독). */
+export const MARKER_KINDS = ['add', 'complete'] as const satisfies readonly ReadingLogKind[];
+export type MarkerKind = (typeof MARKER_KINDS)[number];
 
 /**
  * Activities per day (`YYYY-MM-DD`) for one month, one row per book.
- * Start days come from `startDate`, finish days from `endDate` (falling back to the log date), and
- * wishlist days from when a `want` book was added. `onlyComplete` keeps finish days only.
+ * Start days come from `startDate`, finish days from `endDate` (falling back to the log date).
+ * Wishlist (`want`) books are not shown. `onlyComplete` keeps finish days only.
  */
 export function activitiesByDay(
   logs: ReadingLog[],
@@ -33,7 +30,7 @@ export function activitiesByDay(
 ): Map<string, DayActivity[]> {
   const prefix = `${year}-${String(month).padStart(2, '0')}-`;
   const days = new Map<string, Map<string, DayActivity>>();
-  const add = (date: string, entry: LibraryEntry, kind: CalendarKind, pages: number) => {
+  const add = (date: string, entry: LibraryEntry, kind: ReadingLogKind, pages: number) => {
     if (!date.startsWith(prefix) || (onlyComplete && kind !== 'complete')) return;
     const day = days.get(date) ?? new Map<string, DayActivity>();
     const prev = day.get(entry.id);
@@ -57,10 +54,7 @@ export function activitiesByDay(
     }
   }
   for (const entry of Object.values(entries)) {
-    if (entry.status === 'want') {
-      add(toISODate(new Date(entry.createdAt)), entry, 'want', 0);
-      continue;
-    }
+    if (entry.status === 'want') continue;
     if (entry.startDate) add(entry.startDate, entry, 'add', 0);
     if (entry.status === 'read' && entry.endDate && !completed.has(entry.id)) add(entry.endDate, entry, 'complete', 0);
   }
@@ -70,7 +64,7 @@ export function activitiesByDay(
 }
 
 /** Distinct marker kinds on one day, in `MARKER_KINDS` order. */
-export function markersOf(items: DayActivity[]): CalendarKind[] {
+export function markersOf(items: DayActivity[]): MarkerKind[] {
   return MARKER_KINDS.filter((k) => items.some((a) => a.kinds.includes(k)));
 }
 

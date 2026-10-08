@@ -76,7 +76,8 @@ export function useBook(id: string) {
     const missing = (['pageCount', 'description', 'coverUrl', 'category', 'translators'] as const).some(
       (k) => entry.book[k] === undefined && query.data?.[k] !== undefined,
     );
-    if (missing) updateEntry(entry.id, { book: { ...entry.book, ...definedFields(query.data), id: entry.book.id } });
+    const fullerDescription = (query.data.description?.length ?? 0) > (entry.book.description?.length ?? 0);
+    if (missing || fullerDescription) updateEntry(entry.id, { book: { ...entry.book, ...definedFields(query.data), id: entry.book.id } });
   }, [entry, query.data, updateEntry]);
 
   return { book, isLoading: !local && query.isLoading, isEnriching: query.isFetching, error: query.error };

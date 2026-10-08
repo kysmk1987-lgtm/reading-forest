@@ -1,58 +1,91 @@
 import { useEffect } from 'react';
 import { useTranslation } from 'react-i18next';
+import { AppState, Platform } from 'react-native';
 
-import { todayISO } from '@/lib/date';
-import { alarmFeedback } from '@/lib/feedback';
+import { alarmFeedback, phaseFeedback, preAlertFeedback } from '@/lib/feedback';
 import { useLibraryStore } from '@/stores/libraryStore';
-import { useMixerStore } from '@/stores/mixerStore';
+import { hasAnySound, useMixerStore } from '@/stores/mixerStore';
 import { useTimerStore } from '@/stores/timerStore';
-import { useTogetherStore } from '@/stores/togetherStore';
 
-import { cancelTimerAlarm, scheduleTimerAlarm, showFinishedNotice } from './timerAlarm';
+import { logFocusMinutes, syncTimerSound } from './timerActions';
+import { audibleEvents } from './timerEngine';
+import { useTimerClock } from './TimerRing';
+import { buildTimerNotice, timerChannelNames, timerTitleText } from './timerNotice';
+import { prepareTimerNotifications, setTimerTitle, showPhaseNotice, syncTimerNotifications } from './timerNotify';
 
 /**
- * Mount once at the root. Checks the wall-clock end time every second (so a backgrounded/throttled app catches up
- * as soon as it runs again), rings the alarm, logs focus minutes for the linked book and keeps the native
- * local notification in step with the timer.
+ * Mount once at the root. Every second (and as soon as the app returns to the foreground) it recomputes the run from
+ * its start timestamp, logs finished focus phases, rings the 5-second heads-up / phase bells, keeps the ambient sound
+ * in step and mirrors the timer to notifications (native) or the tab title (web).
  */
 export function TimerWatcher() {
   const { t } = useTranslation();
-  const status = useTimerStore((s) => s.status);
-  const endsAt = useTimerStore((s) => s.endsAt);
-  const phase = useTimerStore((s) => s.phase);
-
-  useEffect(() => {
-    if (status === 'running' && endsAt) {
-      const title = phase === 'focus' ? t('together.timer.focusDoneTitle') : t('together.timer.breakDoneTitle');
-      scheduleTimerAlarm(endsAt, title, t('together.timer.notificationBody'));
-    } else {
-      cancelTimerAlarm();
-    }
-  }, [status, endsAt, phase, t]);
+  const { run, info } = useTimerClock();
+  const entryId = useTimerStore((s) => s.entryId);
+  const bookTitle = useLibraryStore((s) => (entryId ? s.entries[entryId]?.book.title : undefined));
+  const withTimer = useMixerStore((s) => s.withTimer);
+  const duringBreak = useMixerStore((s) => s.duringBreak);
+  const anySound = useMixerStore((s) => hasAnySound(s.volumes));
+  const status = run.status;
+  const phase = info.phase;
 
   useEffect(() => {
     if (status !== 'running') return;
     const check = () => {
-      const session = useTimerStore.getState().finish(Date.now(), todayISO());
-      if (!session) return;
-      alarmFeedback();
-      const title = session.phase === 'focus' ? t('together.timer.focusDoneTitle') : t('together.timer.breakDoneTitle');
-      showFinishedNotice(title, t('together.timer.notificationBody'));
-      if (session.phase === 'focus') {
-        const mixer = useMixerStore.getState();
-        const mix = mixer.roomMix ?? mixer.volumes;
-        const sounds = mixer.playing ? Object.entries(mix).filter(([, v]) => (v ?? 0) > 0).map(([id]) => id) : [];
-        const room = useTogetherStore.getState().roomId;
-        useTimerStore.getState().recordSession({ endedAt: session.endedAt, minutes: session.minutes, entryId: session.entryId, sounds, room });
-        if (session.entryId) {
-          useLibraryStore.getState().addFocusLog(session.entryId, session.minutes, todayISO(), { sounds, room: room ?? undefined });
+      const result = useTimerStore.getState().tick(Date.now());
+      const focusMin = Math.round(result.run.focusMs / 60_000);
+      for (let i = 0; i < result.newFocus; i++) logFocusMinutes(focusMin);
+      for (const e of audibleEvents(result.events, result.clockMs)) {
+        if (e.kind === 'preBreak' || e.kind === 'preFocus' || e.kind === 'preDone') {
+          preAlertFeedback();
+        } else if (e.kind === 'done') {
+          alarmFeedback();
+          showPhaseNotice(t('together.timer.alertDoneTitle'), t('together.timer.alertDoneBody'));
+        } else {
+          phaseFeedback(e.kind);
+          showPhaseNotice(
+            e.kind === 'break' ? t('together.timer.alertBreakTitle') : t('together.timer.alertFocusTitle'),
+            e.kind === 'break' ? t('together.timer.alertBreakBodyShort') : t('together.timer.alertFocusBody', { cycle: e.cycle }),
+          );
         }
       }
     };
     check();
     const timer = setInterval(check, 1000);
+    const sub = AppState.addEventListener('change', (state) => state === 'active' && check());
+    return () => {
+      clearInterval(timer);
+      sub.remove();
+    };
+  }, [status, t]);
+
+  useEffect(() => {
+    syncTimerSound(status, phase);
+  }, [status, phase, withTimer, duringBreak, anySound]);
+
+  // Notifications: re-planned at start/pause/resume and every phase change (not every second).
+  const noticeKey = `${status}|${run.anchorAt}|${run.elapsedMs}|${phase}|${info.cycle}|${run.repeat}|${bookTitle ?? ''}`;
+  useEffect(() => {
+    const current = useTimerStore.getState().run;
+    if (current.status === 'running' || current.status === 'paused') prepareTimerNotifications(timerChannelNames(t), false).catch(() => {});
+    syncTimerNotifications(buildTimerNotice(current, Date.now(), t, bookTitle));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [noticeKey]);
+
+  // Web: countdown in the tab title.
+  useEffect(() => {
+    if (Platform.OS !== 'web') return;
+    if (status !== 'running' && status !== 'paused') {
+      setTimerTitle(null);
+      return;
+    }
+    const update = () => setTimerTitle(timerTitleText(useTimerStore.getState().run, Date.now(), t));
+    update();
+    const timer = setInterval(update, 1000);
     return () => clearInterval(timer);
   }, [status, t]);
+
+  useEffect(() => () => setTimerTitle(null), []);
 
   return null;
 }

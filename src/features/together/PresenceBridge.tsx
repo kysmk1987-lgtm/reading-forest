@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 
 import { API_BASE_URL } from '@/config/app';
 import { speciesOf } from '@/features/forest/species';
+import { todayISO } from '@/lib/date';
 import { useEntitlements } from '@/lib/entitlements';
 import { getSupabase } from '@/lib/supabase';
 import { useLibraryStore } from '@/stores/libraryStore';
@@ -18,7 +19,9 @@ import {
   type Peer,
   type PresencePayload,
 } from './presence';
+import { roomMinutesOn, type ReaderPhase } from './leaderboard';
 import { isRegionKey, regionFromIsoCode } from './regions';
+import { useTimerClock } from './TimerRing';
 
 /** Detects the 시·도 once per launch from `/api/geo` (IP based, no permission). */
 function useRegionDetection() {
@@ -41,16 +44,24 @@ function useRegionDetection() {
 /** What this tab publishes (null = not reading right now → untrack). */
 function useMyPayload(): PresencePayload | null {
   const region = useMyRegion();
-  const running = useTimerStore((s) => s.status === 'running');
+  const { run, elapsed, info } = useTimerClock();
+  const history = useTimerStore((s) => s.history);
   const entryId = useTimerStore((s) => s.entryId);
   const roomId = useTogetherStore((s) => s.roomId);
+  const roomToken = useTogetherStore((s) => s.roomToken);
   const nickname = useProfileStore((s) => s.nickname);
   const entry = useLibraryStore((s) => (entryId ? s.entries[entryId] : undefined));
   const { isPremium } = useEntitlements();
+  const running = run.status === 'running';
+  const phase: ReaderPhase | undefined =
+    run.status === 'paused' ? 'paused' : running && info.phase !== 'done' ? info.phase : undefined;
+  // Derived from the start anchor, so it stays constant within a focus phase (the memo below doesn't churn).
+  const since = running && info.phase === 'focus' && run.anchorAt !== null ? run.anchorAt + elapsed - info.phaseElapsedMs : undefined;
   return useMemo(() => {
     if (!running && !roomId) return null;
     const base: PresencePayload = { region, status: roomId ? 'room' : 'focusing' };
     if (!roomId) return base;
+    const day = todayISO();
     return {
       ...base,
       room: roomId,
@@ -58,8 +69,12 @@ function useMyPayload(): PresencePayload | null {
       species: entry ? speciesOf(entry, isPremium) : undefined,
       book: entry?.book.title,
       cover: entry?.book.coverUrl,
+      phase,
+      since,
+      todayMin: roomMinutesOn(history, roomId, day),
+      token: roomToken?.day === day ? roomToken.token : undefined,
     };
-  }, [running, roomId, region, nickname, entry, isPremium]);
+  }, [running, roomId, region, nickname, entry, isPremium, phase, since, history, roomToken]);
 }
 
 /** Mount once at the root: keeps the Realtime channel (or demo simulation) and this tab's presence in sync. */

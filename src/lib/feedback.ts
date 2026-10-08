@@ -41,6 +41,18 @@ export function alarmFeedback() {
   playSound('chime', 0.8);
 }
 
+/** 5 seconds before a timer phase ends: a soft heads-up (also an alarm, so it ignores the UI sound setting). */
+export function preAlertFeedback() {
+  vibrate(Haptics.ImpactFeedbackStyle.Light);
+  playSound('soon', 0.55);
+}
+
+/** A timer phase switched (focus → break or break → focus): each direction has its own bell. */
+export function phaseFeedback(next: 'focus' | 'break') {
+  notifySuccess();
+  playSound(next === 'break' ? 'toBreak' : 'toFocus', 0.75);
+}
+
 /** Watered a forest. */
 export function waterFeedback() {
   vibrate(Haptics.ImpactFeedbackStyle.Medium);

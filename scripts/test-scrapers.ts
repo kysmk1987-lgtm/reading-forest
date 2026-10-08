@@ -7,7 +7,7 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 
-import { daumBookFacts, daumPagesEnabled, isDaumBookPageUrl, parseDaumBookPage } from '../api/_lib/daum';
+import { daumBookFacts, daumPagesEnabled, isDaumBookPageUrl, parseDaumBookPage, parseDaumIntro } from '../api/_lib/daum';
 import { kyoboBestsellers, kyoboEnabled, parseKyoboBestsellers } from '../api/_lib/kyobo';
 
 const fixture = (name: string) => readFileSync(join(__dirname, 'fixtures', name), 'utf8');
@@ -35,6 +35,23 @@ async function main() {
     assert.equal(parseDaumBookPage('<dt>페이지수</dt><dd>392 | <span>사이즈</span> 158*233mm</dd>').pageCount, 392);
     assert.equal(parseDaumBookPage('<dt>페이지수</dt><dd>정보 없음</dd>').pageCount, undefined);
     assert.equal(parseDaumBookPage('<html>changed layout</html>').pageCount, undefined);
+  });
+  await test('언스크립티드: full 책소개 (Kakao cuts it at ~250 chars), not the 목차', () => {
+    const facts = parseDaumBookPage(fixture('daum-bookpage-9791187444213.html'));
+    assert.equal(facts.pageCount, 496);
+    const intro = facts.description!;
+    assert.ok(intro.startsWith('30대에 자수성가한 백만장자'), intro.slice(0, 40));
+    assert.ok(intro.endsWith('동기부여가 되어준다.'), intro.slice(-40));
+    assert.ok(intro.length > 600, String(intro.length));
+    assert.equal(intro.split('\n\n').length, 3);
+    assert.ok(!intro.includes('PART 1') && !intro.includes('<'));
+  });
+  await test('책소개 with a collapsed tail (.ellipsis + .hide_desc) is joined; missing section → undefined', () => {
+    const html =
+      '<div class="coll_tit"> <h3 class="tit">책소개</h3> </div> <p class="desc"> 첫 문단 &amp; 끝. <br> <br>둘째 문단의 앞<span class="ellipsis">...</span><span class="hide_desc">과 뒤.</span> </p>';
+    assert.equal(parseDaumIntro(html), '첫 문단 & 끝.\n\n둘째 문단의 앞과 뒤.');
+    assert.equal(parseDaumIntro('<h3 class="tit">목차</h3></div><p class="desc">1장</p>'), undefined);
+    assert.equal(parseDaumBookPage(fixture('daum-bookpage-9788954682152.html')).description, undefined);
   });
   await test('only https://search.daum.net bookpage URLs are fetched', () => {
     assert.ok(isDaumBookPageUrl('https://search.daum.net/search?w=bookpage&bookId=5824679&q=%EC%9E%91'));

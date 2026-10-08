@@ -202,7 +202,7 @@ test('sample report is a night thinker with ~42 trees a year', () => {
 console.log('calendar markers');
 const calLog = (over: Partial<ReadingLog>): ReadingLog =>
   ({ id: Math.random().toString(36), entryId: 'e1', bookId: 'b', date: '2026-10-07', kind: 'progress', pagesDelta: 0, createdAt: 0, ...over }) as ReadingLog;
-test('all mode shows start, wishlist and finish days; complete mode only finish days', () => {
+test('all mode shows start and finish days (no wishlist days); complete mode only finish days', () => {
   const entries = {
     a: entry({ id: 'a', status: 'reading', startDate: '2026-10-03' }),
     w: entry({ id: 'w', status: 'want', createdAt: new Date(2026, 9, 5, 12).getTime() }),
@@ -214,7 +214,9 @@ test('all mode shows start, wishlist and finish days; complete mode only finish 
   ];
   const all = activitiesByDay(logs, entries, 2026, 10, false);
   assert.deepEqual(markersOf(all.get('2026-10-03') ?? []), ['add']);
-  assert.deepEqual(markersOf(all.get('2026-10-05') ?? []), ['want']);
+  assert.equal(all.has('2026-10-05'), false);
+  assert.deepEqual([...all.keys()].sort(), ['2026-10-01', '2026-10-03', '2026-10-07']);
+  assert.ok([...all.values()].flat().every((x) => x.entry.id !== 'w'));
   assert.deepEqual(markersOf(all.get('2026-10-01') ?? []), ['add']);
   const oct7 = all.get('2026-10-07') ?? [];
   assert.deepEqual(markersOf(oct7), ['complete']);
